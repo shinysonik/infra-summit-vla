@@ -1,0 +1,51 @@
+# MuJoCo simulation configuration.
+# Owned by: feature/mujoco-scene
+# Consumed by: /sim, and indirectly by /eval (which steps the sim).
+#
+# All paths are relative to the repository root. Nothing in /sim may hardcode
+# a path, a body/joint name, or a camera name -- it comes from here.
+
+scene:
+  # TODO(feature/mujoco-scene): author the MJCF. Placeholder path.
+  mjcf: sim/assets/dinner_table_dual_so101.xml
+  asset_dir: sim/assets
+
+physics:
+  timestep: 0.002            # seconds per mj_step
+  control_decimation: 10     # physics steps applied per policy action
+  gravity: [0.0, 0.0, -9.81]
+
+# Camera names must match the <camera> elements in the MJCF scene.
+# This list defines the observation stream handed to the policy.
+cameras:
+  - name: overhead
+    width: 640
+    height: 480
+  - name: wrist_left
+    width: 320
+    height: 240
+  - name: wrist_right
+    width: 320
+    height: 240
+
+robot:
+  # Name prefixes used to resolve joints/actuators per arm in the MJCF.
+  left_arm_prefix: left_
+  right_arm_prefix: right_
+  home_qpos: null            # TODO: rest pose once the rig exists
+
+# Objects the dinner-table task manipulates. Names must match MJCF bodies.
+objects:
+  drawer: drawer
+  plate: plate
+  cup: cup
+  bottle: bottle
+  cutlery:
+    - spoon_1
+    - spoon_2
+    - fork_1
+    - fork_2
+
+viewer:
+  enabled: false             # MuJoCo native viewer; off for headless eval runs
+  offscreen_renderer: true

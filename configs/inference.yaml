@@ -1,0 +1,28 @@
+# OpenVINO inference runtime.
+# Owned by: feature/openvino-inference
+# Consumed by: /inference, /eval (both the harness and the benchmark).
+#
+# device and precision are the two values the rubric cares about most
+# (20 pts, OpenVINO & Intel Core Ultra Optimization). They are parameters,
+# never constants in code -- switching CPU -> iGPU -> NPU must be a config
+# edit, not a code edit.
+
+model:
+  ir_xml: outputs/export/openvino/policy.xml
+  ir_bin: outputs/export/openvino/policy.bin
+
+# CPU | GPU | NPU | AUTO  (GPU = Intel iGPU on Core Ultra)
+device: CPU
+
+# FP32 | FP16 | INT8 -- OPEN QUESTION (PRD 7.5)
+precision: FP16
+
+runtime:
+  performance_hint: LATENCY   # LATENCY | THROUGHPUT
+  num_streams: null           # null = let OpenVINO choose
+  num_requests: 1
+  cache_dir: outputs/openvino_cache
+
+# Number of actions returned per inference call. >1 amortizes inference cost
+# across physics steps if per-step latency turns out too high.
+action_chunk_size: 1

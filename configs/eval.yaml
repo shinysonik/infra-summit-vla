@@ -1,0 +1,47 @@
+# Evaluation harness and Intel benchmark.
+# Owned by: feature/eval-benchmark
+# Consumed by: /eval
+#
+# Two independent entry points read this file: the 10-seed episode harness
+# (steps MuJoCo) and the standalone benchmark (does NOT step MuJoCo).
+
+episode:
+  max_steps: 2000
+  # Natural-language command, taken from the brief's example.
+  instruction: >-
+    Open the top drawer, pick up the plate with arm A, place it on the table,
+    pick up the mug with arm B, pour water into the mug with arm A.
+
+# Logged per episode; order defines the expected task sequence. The brief
+# requires at least one hand-off or complementary dual-arm action.
+subtasks:
+  - drawer_opened
+  - cutlery_retrieved
+  - plate_placed
+  - cup_placed
+  - handoff_completed
+  - pour_completed
+
+success:
+  require_all_subtasks: true
+  # Partial credit accounting for the write-up, even when the run fails.
+  report_partial_completion: true
+
+logging:
+  output_dir: outputs/eval
+  # Per-episode record: instruction, seed, subtask completion, outcome, timing.
+  format: jsonl
+  record_video: true
+  video_fps: 30
+
+benchmark:
+  # Standalone OpenVINO benchmark -- deliverable #3. Runs the inference
+  # pipeline without physics, so it isolates model performance.
+  warmup_iterations: 20
+  measured_iterations: 200
+  # OPEN QUESTION (PRD 7.5): benchmark all three, or pick one and justify it.
+  devices: [CPU, GPU, NPU]
+  precisions: [FP16, INT8]
+  report_path: outputs/benchmark/report.json
+  # Reported per the brief: latency, throughput, device selection, precision.
+  metrics: [latency_ms_p50, latency_ms_p95, throughput_fps, device, precision]

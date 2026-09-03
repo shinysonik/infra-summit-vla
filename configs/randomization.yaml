@@ -1,0 +1,32 @@
+# Domain randomization ranges and the evaluation seed list.
+# Owned by: feature/mujoco-scene
+# Consumed by: /sim (applies the randomization) and /eval (iterates the seeds).
+#
+# Shared deliberately: the brief requires results across 10 randomized seeds,
+# so the seed list must have exactly one definition in the repo.
+
+# Deliverable #4 requires 10 randomized environment seeds.
+seeds: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+# Ranges are placeholders until the scene exists; every axis the brief names
+# (object placement, weight, friction, shape, lighting, background) has a slot.
+ranges:
+  object_pose:
+    position_xy_m: [-0.05, 0.05]
+    yaw_rad: [-0.35, 0.35]
+
+  mass_scale: [0.7, 1.3]          # multiplier on nominal object mass
+  friction_scale: [0.6, 1.4]      # multiplier on nominal sliding friction
+  shape_scale: [0.9, 1.1]         # uniform scale on manipulable geoms
+
+  lighting:
+    ambient: [0.2, 0.6]
+    diffuse: [0.4, 0.9]
+    position_jitter_m: [-0.3, 0.3]
+
+  background:
+    texture_dir: sim/assets/textures/backgrounds
+    randomize_table_material: true
+
+# Applied once at episode reset, never mid-episode.
+apply_at: episode_reset

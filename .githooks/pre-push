@@ -1,0 +1,75 @@
+#!/usr/bin/env sh
+#
+# pre-push -- blocks direct pushes to the protected branch and explains why,
+# in English and Russian.
+#
+# THIS IS A CLIENT-SIDE REMINDER, NOT THE ENFORCEMENT.
+# The real enforcement is GitHub branch protection on the remote, which stays
+# active even if this hook is removed, not installed, or bypassed.
+# (github.com does not support custom server-side pre-receive hooks -- those
+# exist only on GitHub Enterprise Server -- so a bilingual server-side reject
+# message is not possible. Hence this.)
+#
+# Install:  scripts/setup-hooks.sh      (or: git config core.hooksPath .githooks)
+# Bypass:   git push --no-verify        (repo owner only)
+#
+# The protected branch is configurable, not hardcoded:
+#   git config hooks.protectedBranch <name>
+#
+# stdin: <local_ref> <local_sha> <remote_ref> <remote_sha>
+
+set -u
+
+protected_branch="$(git config --get hooks.protectedBranch 2>/dev/null || true)"
+[ -n "$protected_branch" ] || protected_branch="main"
+protected_ref="refs/heads/${protected_branch}"
+
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+	[ -n "${remote_ref:-}" ] || continue
+	[ "$remote_ref" = "$protected_ref" ] || continue
+
+	cat >&2 <<MSG
+
+  ============================================================================
+   PUSH BLOCKED / ПУШ ЗАБЛОКИРОВАН        ->  ${protected_branch}
+  ============================================================================
+
+  [EN] Direct pushes to '${protected_branch}' are not allowed.
+
+       For project organisation reasons this branch is protected: every change
+       goes through a Pull Request reviewed by the repo owner (@Akaired).
+
+       Work on your own branch instead:
+
+           git checkout -b feature/<your-feature>
+           git push -u origin feature/<your-feature>
+
+       Then open a Pull Request on GitHub.
+
+  ----------------------------------------------------------------------------
+
+  [RU] Прямые пуши в ветку «${protected_branch}» запрещены.
+
+       По организационным причинам эта ветка защищена: любое изменение
+       проходит через Pull Request, который проверяет владелец
+       репозитория (@Akaired).
+
+       Работайте в своей ветке:
+
+           git checkout -b feature/<название-фичи>
+           git push -u origin feature/<название-фичи>
+
+       Затем откройте Pull Request на GitHub.
+
+  ============================================================================
+   [EN] This hook is only a local reminder. The real protection is GitHub
+        branch protection -- it stays active even if you remove this hook.
+   [RU] Этот хук — лишь локальное напоминание. Настоящая защита — branch
+        protection на GitHub: она работает, даже если удалить хук.
+  ============================================================================
+
+MSG
+	exit 1
+done
+
+exit 0

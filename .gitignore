@@ -1,0 +1,106 @@
+# ---------------------------------------------------------------------------
+# Claude
+# ---------------------------------------------------------------------------
+CLAUDE.md 
+TODO.md 
+.claude/
+
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Environments
+.venv/
+venv/
+env/
+.python-version
+.conda/
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.coverage
+coverage.xml
+htmlcov/
+
+# ---------------------------------------------------------------------------
+# MuJoCo / rendering
+# ---------------------------------------------------------------------------
+MUJOCO_LOG.TXT
+*.mjb
+mjkey.txt
+# Compiled/derived scene artifacts -- the authored MJCF under sim/assets is
+# tracked, generated ones are not.
+sim/assets/**/*_generated.xml
+
+# ---------------------------------------------------------------------------
+# Model checkpoints, exports, OpenVINO IR
+# ---------------------------------------------------------------------------
+outputs/
+checkpoints/
+*.ckpt
+*.pt
+*.pth
+*.safetensors
+*.onnx
+# OpenVINO IR lives under outputs/ (already ignored above) -- regenerate it from
+# the checkpoint rather than committing policy.xml / policy.bin.
+
+# ---------------------------------------------------------------------------
+# Datasets (LeRobot, demonstrations, recordings)
+# ---------------------------------------------------------------------------
+# Note: 'data/*' not 'data/' -- git does not descend into an excluded
+# directory, so a negation inside one would never match.
+data/*
+!data/.gitkeep
+*.parquet
+*.hdf5
+*.h5
+*.lerobot/
+.cache/
+.huggingface/
+
+# Demo / eval media
+*.mp4
+*.mkv
+*.webm
+*.gif
+
+# ---------------------------------------------------------------------------
+# Secrets and local config
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.secrets/
+
+# ---------------------------------------------------------------------------
+# Node (optional web viewer under apps/web)
+# ---------------------------------------------------------------------------
+node_modules/
+.next/
+.turbo/
+*.tsbuildinfo
+
+# ---------------------------------------------------------------------------
+# OS / editors
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
