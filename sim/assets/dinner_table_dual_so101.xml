@@ -1,0 +1,198 @@
+<mujoco model="dinner_table_dual_so101_placeholder">
+  <!--
+    PLACEHOLDER RIG - not the real SO-101 MJCF.
+
+    Purpose: unblock everyone else (policy/inference/eval) with a scene that
+    already satisfies the sim.yaml contract:
+      - joint/body names prefixed left_ / right_ (robot.left_arm_prefix etc.)
+      - object body names match sim.yaml `objects:` exactly
+      - camera names match sim.yaml `cameras:` exactly (overhead, wrist_left, wrist_right)
+
+    Swap plan: once a real SO-101 MJCF exists (or gym-aloha is adopted),
+    replace the two <body name="left_arm_base".../> / right_arm_base subtrees
+    below. Nothing outside this file should need to change, because /sim,
+    /policy, /inference, /eval only ever talk to names, not this geometry.
+
+    Arm model: 5 revolute joints + 1 prismatic gripper per arm, built from
+    primitive capsules/boxes. Rough SO-101-like proportions (small desktop
+    arm), not a kinematic match to the real hardware.
+  -->
+
+  <compiler angle="radian" autolimits="true"/>
+
+  <option timestep="0.002" gravity="0 0 -9.81" integrator="implicitfast"/>
+
+  <default>
+    <default class="arm_link">
+      <geom type="capsule" size="0.02" rgba="0.7 0.7 0.75 1" density="1200"/>
+      <joint type="hinge" damping="0.5" armature="0.01" frictionloss="0.05"/>
+    </default>
+    <default class="gripper_finger">
+      <geom type="box" rgba="0.2 0.2 0.2 1" density="1200"/>
+      <joint type="slide" damping="1.0" range="0 0.04"/>
+    </default>
+    <default class="manip_object">
+      <joint type="free" damping="0.001"/>
+      <geom density="500" friction="0.9 0.01 0.001"/>
+    </default>
+  </default>
+
+  <asset>
+    <texture name="tex_table" type="2d" builtin="checker" rgb1="0.55 0.35 0.2" rgb2="0.5 0.3 0.18" width="300" height="300"/>
+    <material name="mat_table" texture="tex_table" texrepeat="4 4" reflectance="0.05"/>
+    <material name="mat_drawer" rgba="0.45 0.3 0.2 1"/>
+    <material name="mat_plate" rgba="0.9 0.9 0.92 1"/>
+    <material name="mat_cup" rgba="0.85 0.85 0.95 0.9"/>
+    <material name="mat_bottle" rgba="0.2 0.5 0.3 0.8"/>
+    <material name="mat_metal" rgba="0.75 0.75 0.78 1"/>
+    <texture name="tex_sky" type="skybox" builtin="gradient" rgb1="0.65 0.75 0.9" rgb2="0.15 0.2 0.3" width="256" height="256"/>
+  </asset>
+
+  <worldbody>
+    <light name="key_light" pos="0 0 1.6" dir="0 0 -1" diffuse="0.7 0.7 0.7" ambient="0.4 0.4 0.4"/>
+
+    <!-- ============ TABLE ============ -->
+    <body name="table" pos="0 0 0">
+      <geom name="table_top" type="box" size="0.5 0.35 0.02" pos="0 0 0.75" material="mat_table"/>
+      <geom type="box" size="0.03 0.03 0.375" pos="0.45 0.3 0.375" rgba="0.3 0.2 0.1 1"/>
+      <geom type="box" size="0.03 0.03 0.375" pos="-0.45 0.3 0.375" rgba="0.3 0.2 0.1 1"/>
+      <geom type="box" size="0.03 0.03 0.375" pos="0.45 -0.3 0.375" rgba="0.3 0.2 0.1 1"/>
+      <geom type="box" size="0.03 0.03 0.375" pos="-0.45 -0.3 0.375" rgba="0.3 0.2 0.1 1"/>
+    </body>
+
+    <!-- ============ DRAWER (single sliding joint body named `drawer`) ============ -->
+    <body name="drawer" pos="0 0.32 0.68">
+      <joint name="drawer_slide" type="slide" axis="0 1 0" range="0 0.18" damping="4.0" frictionloss="1.0"/>
+      <geom name="drawer_box" type="box" size="0.12 0.09 0.04" material="mat_drawer"/>
+      <geom type="box" size="0.13 0.005 0.045" pos="0 -0.095 0" material="mat_drawer"/>
+    </body>
+
+    <!-- ============ MANIPULABLE OBJECTS (names must match sim.yaml objects:) ============ -->
+    <body name="plate" pos="-0.15 -0.1 0.79">
+      <joint class="manip_object"/>
+      <geom type="cylinder" size="0.09 0.008" material="mat_plate"/>
+    </body>
+
+    <body name="cup" pos="0.15 -0.1 0.82">
+      <joint class="manip_object"/>
+      <geom type="cylinder" size="0.03 0.045" material="mat_cup"/>
+    </body>
+
+    <body name="bottle" pos="0.25 0.05 0.86">
+      <joint class="manip_object"/>
+      <geom type="cylinder" size="0.025 0.09" material="mat_bottle"/>
+    </body>
+
+    <body name="spoon_1" pos="-0.05 0.15 0.775">
+      <joint class="manip_object"/>
+      <geom type="capsule" size="0.006 0.06" material="mat_metal"/>
+    </body>
+    <body name="spoon_2" pos="-0.02 0.15 0.775">
+      <joint class="manip_object"/>
+      <geom type="capsule" size="0.006 0.06" material="mat_metal"/>
+    </body>
+    <body name="fork_1" pos="0.02 0.15 0.775">
+      <joint class="manip_object"/>
+      <geom type="capsule" size="0.006 0.06" material="mat_metal"/>
+    </body>
+    <body name="fork_2" pos="0.05 0.15 0.775">
+      <joint class="manip_object"/>
+      <geom type="capsule" size="0.006 0.06" material="mat_metal"/>
+    </body>
+
+    <!-- ============ LEFT ARM (prefix must match sim.yaml robot.left_arm_prefix) ============ -->
+    <body name="left_arm_base" pos="-0.55 0 0.75">
+      <geom class="arm_link" type="cylinder" size="0.04 0.03" rgba="0.3 0.3 0.35 1"/>
+      <body name="left_link1" pos="0 0 0.03">
+        <joint name="left_joint1" class="arm_link" axis="0 0 1" range="-3.05 3.05"/>
+        <geom class="arm_link" fromto="0 0 0 0 0 0.12"/>
+        <body name="left_link2" pos="0 0 0.12">
+          <joint name="left_joint2" class="arm_link" axis="0 1 0" range="-1.7 1.7"/>
+          <geom class="arm_link" fromto="0 0 0 0.18 0 0.05"/>
+          <body name="left_link3" pos="0.18 0 0.05">
+            <joint name="left_joint3" class="arm_link" axis="0 1 0" range="-2.8 0.1"/>
+            <geom class="arm_link" fromto="0 0 0 0.16 0 -0.02"/>
+            <body name="left_link4" pos="0.16 0 -0.02">
+              <joint name="left_joint4" class="arm_link" axis="0 1 0" range="-1.6 1.6"/>
+              <geom class="arm_link" size="0.015" fromto="0 0 0 0.08 0 0"/>
+              <body name="left_link5" pos="0.08 0 0">
+                <joint name="left_joint5" class="arm_link" axis="1 0 0" range="-3.05 3.05"/>
+                <geom class="arm_link" size="0.014" fromto="0 0 0 0.05 0 0"/>
+                <body name="left_gripper_base" pos="0.05 0 0">
+                  <camera name="wrist_left" mode="fixed" pos="0.03 0 0.03" euler="0 -1.2 0" fovy="55"/>
+                  <geom type="box" size="0.015 0.03 0.015" rgba="0.2 0.2 0.2 1"/>
+                  <body name="left_finger1" pos="0.02 0.02 0">
+                    <joint name="left_gripper_joint1" class="gripper_finger" axis="0 1 0"/>
+                    <geom class="gripper_finger" size="0.006 0.015 0.006"/>
+                  </body>
+                  <body name="left_finger2" pos="0.02 -0.02 0">
+                    <joint name="left_gripper_joint2" class="gripper_finger" axis="0 -1 0"/>
+                    <geom class="gripper_finger" size="0.006 0.015 0.006"/>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+
+    <!-- ============ RIGHT ARM (mirrored, prefix right_) ============ -->
+    <body name="right_arm_base" pos="0.55 0 0.75">
+      <geom class="arm_link" type="cylinder" size="0.04 0.03" rgba="0.3 0.3 0.35 1"/>
+      <body name="right_link1" pos="0 0 0.03">
+        <joint name="right_joint1" class="arm_link" axis="0 0 1" range="-3.05 3.05"/>
+        <geom class="arm_link" fromto="0 0 0 0 0 0.12"/>
+        <body name="right_link2" pos="0 0 0.12">
+          <joint name="right_joint2" class="arm_link" axis="0 1 0" range="-1.7 1.7"/>
+          <geom class="arm_link" fromto="0 0 0 -0.18 0 0.05"/>
+          <body name="right_link3" pos="-0.18 0 0.05">
+            <joint name="right_joint3" class="arm_link" axis="0 1 0" range="-0.1 2.8"/>
+            <geom class="arm_link" fromto="0 0 0 -0.16 0 -0.02"/>
+            <body name="right_link4" pos="-0.16 0 -0.02">
+              <joint name="right_joint4" class="arm_link" axis="0 1 0" range="-1.6 1.6"/>
+              <geom class="arm_link" size="0.015" fromto="0 0 0 -0.08 0 0"/>
+              <body name="right_link5" pos="-0.08 0 0">
+                <joint name="right_joint5" class="arm_link" axis="1 0 0" range="-3.05 3.05"/>
+                <geom class="arm_link" size="0.014" fromto="0 0 0 -0.05 0 0"/>
+                <body name="right_gripper_base" pos="-0.05 0 0">
+                  <camera name="wrist_right" mode="fixed" pos="-0.03 0 0.03" euler="0 1.2 3.14159"/>
+                  <geom type="box" size="0.015 0.03 0.015" rgba="0.2 0.2 0.2 1"/>
+                  <body name="right_finger1" pos="-0.02 0.02 0">
+                    <joint name="right_gripper_joint1" class="gripper_finger" axis="0 1 0"/>
+                    <geom class="gripper_finger" size="0.006 0.015 0.006"/>
+                  </body>
+                  <body name="right_finger2" pos="-0.02 -0.02 0">
+                    <joint name="right_gripper_joint2" class="gripper_finger" axis="0 -1 0"/>
+                    <geom class="gripper_finger" size="0.006 0.015 0.006"/>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+
+    <!-- ============ OVERHEAD CAMERA (name must match sim.yaml cameras:) ============ -->
+    <camera name="overhead" mode="fixed" pos="0 0 1.55" euler="0 0 0" fovy="60"/>
+
+  </worldbody>
+
+  <actuator>
+    <position name="left_joint1_act" joint="left_joint1" kp="15" ctrlrange="-3.05 3.05"/>
+    <position name="left_joint2_act" joint="left_joint2" kp="15" ctrlrange="-1.7 1.7"/>
+    <position name="left_joint3_act" joint="left_joint3" kp="15" ctrlrange="-2.8 0.1"/>
+    <position name="left_joint4_act" joint="left_joint4" kp="10" ctrlrange="-1.6 1.6"/>
+    <position name="left_joint5_act" joint="left_joint5" kp="8" ctrlrange="-3.05 3.05"/>
+    <position name="left_gripper_act" joint="left_gripper_joint1" kp="20" ctrlrange="0 0.04"/>
+
+    <position name="right_joint1_act" joint="right_joint1" kp="15" ctrlrange="-3.05 3.05"/>
+    <position name="right_joint2_act" joint="right_joint2" kp="15" ctrlrange="-1.7 1.7"/>
+    <position name="right_joint3_act" joint="right_joint3" kp="15" ctrlrange="-0.1 2.8"/>
+    <position name="right_joint4_act" joint="right_joint4" kp="10" ctrlrange="-1.6 1.6"/>
+    <position name="right_joint5_act" joint="right_joint5" kp="8" ctrlrange="-3.05 3.05"/>
+    <position name="right_gripper_act" joint="right_gripper_joint1" kp="20" ctrlrange="0 0.04"/>
+  </actuator>
+
+</mujoco>
