@@ -42,8 +42,6 @@ policy/       LeRobot fine-tuning / distillation, export to ONNX -> OpenVINO IR
 inference/    OpenVINO runtime: IR loading, device selection, (instruction, obs, state) -> action
 eval/         Two entry points: 10-seed episode harness, and the standalone Intel benchmark
 apps/web/     Optional local viewer for demo polish. Not graded, cut first.
-.githooks/    Shared git hooks (bilingual pre-push guard on main)
-scripts/      One-shot setup helpers
 ```
 
 Each module is independently runnable and testable — that separation is itself a
@@ -54,7 +52,6 @@ rubric line (*Technical Quality & Reproducibility*, 10 pts).
 ```bash
 git clone https://github.com/Akaired/infra-summit-vla.git
 cd infra-summit-vla
-./scripts/setup-hooks.sh     # installs the shared pre-push hook, run once
 ```
 
 Dependencies are not pinned yet: `pyproject.toml` carries empty
@@ -102,6 +99,6 @@ Unresolved team decisions, tracked in PRD §7 — not to be settled inside a PR:
 
 ## Workflow
 
-`main` is protected: all work happens on `feature/<name>` branches and lands via
-Pull Request reviewed by @Akaired. See [CONTRIBUTING.md](./CONTRIBUTING.md) for
-the full workflow in English and Russian.
+The team pushes freely to `main` — no required Pull Requests, no branch
+restrictions. See [CONTRIBUTING.md](./CONTRIBUTING.md) for branch-naming
+conventions.
