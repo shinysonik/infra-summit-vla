@@ -46,10 +46,25 @@
     <material name="mat_bottle" rgba="0.2 0.5 0.3 0.8"/>
     <material name="mat_metal" rgba="0.75 0.75 0.78 1"/>
     <texture name="tex_sky" type="skybox" builtin="gradient" rgb1="0.65 0.75 0.9" rgb2="0.15 0.2 0.3" width="256" height="256"/>
+
+    <!-- Room: light checkerboard floor, flat light-colored walls -->
+    <texture name="tex_floor" type="2d" builtin="checker" rgb1="0.82 0.82 0.84" rgb2="0.62 0.62 0.66" width="300" height="300"/>
+    <material name="mat_floor" texture="tex_floor" texrepeat="12 12" reflectance="0.1"/>
+    <material name="mat_wall" rgba="0.93 0.91 0.86 1"/>
   </asset>
 
   <worldbody>
     <light name="key_light" pos="0 0 1.6" dir="0 0 -1" diffuse="0.7 0.7 0.7" ambient="0.4 0.4 0.4"/>
+
+    <!-- ============ ROOM: floor + walls (background, not part of the task) ============
+         Static (no joint -> welded to world), so this adds zero simulation cost:
+         static-vs-static contacts generate no forces. Room is oversized (4m) relative
+         to the ~1m table+arm footprint so it never clips the workspace or cameras. -->
+    <geom name="floor" type="plane" size="4 4 0.1" pos="0 0 0" material="mat_floor"/>
+    <geom name="wall_back" type="box" size="4 0.05 1.5" pos="0 4 1.5" material="mat_wall"/>
+    <geom name="wall_left" type="box" size="0.05 4 1.5" pos="-4 0 1.5" material="mat_wall"/>
+    <geom name="wall_right" type="box" size="0.05 4 1.5" pos="4 0 1.5" material="mat_wall"/>
+    <!-- front wall intentionally omitted so it never occludes the overhead camera or a demo-recording viewpoint -->
 
     <!-- ============ TABLE ============ -->
     <body name="table" pos="0 0 0">
@@ -83,19 +98,29 @@
       <geom type="cylinder" size="0.025 0.09" material="mat_bottle"/>
     </body>
 
-    <body name="spoon_1" pos="-0.05 0.15 0.775">
+    <!--
+      Cutlery must lie FLAT on the table. A capsule's long axis defaults to
+      local Z, so a small euler tilt (a few degrees) still leaves it nearly
+      vertical -- it takes a full 90 deg rotation to lie down, not a nudge.
+      Rotating -90 deg (-1.5708 rad) about X maps local Z -> global Y, so the
+      capsule's 0.06 half-length now runs along Y (flat) instead of standing
+      up through the table. z = table_top_surface (0.75 + 0.02 = 0.77) +
+      capsule radius (0.006) = 0.776, so it rests exactly on the surface
+      instead of floating above it or clipping into it.
+    -->
+    <body name="spoon_1" pos="-0.05 0.05 0.776" euler="-1.5708 0 0.05">
       <joint class="manip_object"/>
       <geom type="capsule" size="0.006 0.06" material="mat_metal"/>
     </body>
-    <body name="spoon_2" pos="-0.02 0.15 0.775">
+    <body name="spoon_2" pos="-0.02 0.05 0.776" euler="-1.5708 0 -0.05">
       <joint class="manip_object"/>
       <geom type="capsule" size="0.006 0.06" material="mat_metal"/>
     </body>
-    <body name="fork_1" pos="0.02 0.15 0.775">
+    <body name="fork_1" pos="0.02 0.05 0.776" euler="-1.5708 0 0.05">
       <joint class="manip_object"/>
       <geom type="capsule" size="0.006 0.06" material="mat_metal"/>
     </body>
-    <body name="fork_2" pos="0.05 0.15 0.775">
+    <body name="fork_2" pos="0.05 0.05 0.776" euler="-1.5708 0 -0.05">
       <joint class="manip_object"/>
       <geom type="capsule" size="0.006 0.06" material="mat_metal"/>
     </body>

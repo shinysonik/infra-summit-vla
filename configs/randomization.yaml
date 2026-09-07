@@ -8,13 +8,109 @@
 # Deliverable #4 requires 10 randomized environment seeds.
 seeds: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
-# Ranges are placeholders until the scene exists; every axis the brief names
-# (object placement, weight, friction, shape, lighting, background) has a slot.
-ranges:
-  object_pose:
-    position_xy_m: [-0.05, 0.05]
-    yaw_rad: [-0.35, 0.35]
+# ---------------------------------------------------------------------------
+# Placement: rejection-sampling parameters for collision-free spawning.
+#
+# table_half_extent_m comes straight from the MJCF:
+#   <geom name="table_top" type="box" size="0.5 0.35 0.02" .../>
+# In MJCF a box's `size` IS the half-extent (easy to misread as a full
+# dimension) -- so the table is 1.0m x 0.7m, half-extents 0.5m x 0.35m.
+# Every per-object x/y range below is derived from these two numbers minus
+# margin minus that object's own effective radius.
+# ---------------------------------------------------------------------------
+placement:
+  table_half_extent_m: [0.5, 0.35]
+  margin_from_table_edge_m: 0.02
+  min_gap_between_objects_m: 0.02
+  max_attempts: 200
 
+  # Cutlery-only, soft constraint. NOT a physical collision: the drawer body
+  # (z-range [0.64, 0.72]) sits entirely below the tabletop surface objects
+  # rest on (z=0.77+), so there is no real 3D overlap possible between
+  # cutlery and the drawer regardless of XY position. This exists purely to
+  # keep cutlery out of the drawer's overhead opening path -- an arm reaching
+  # down to open the drawer shouldn't have to route around a randomly-placed
+  # spoon. Drop this block entirely if that workspace concern doesn't matter
+  # to you; nothing else depends on it.
+  drawer_avoidance:
+    drawer_y_center_m: 0.32
+    drawer_half_extent_y_m: 0.09
+    extra_margin_m: 0.03
+
+# ---------------------------------------------------------------------------
+# Per-object spawn ranges. x/y bounds are pre-computed (table half-extent -
+# margin - effective radius) so every object can reach anywhere on the table
+# its own physical size allows -- not fixed zones.
+#
+# `shape` drives which collision-distance formula randomization.py uses:
+#   circle  -> plate, cup, bottle (round, footprint = radius only)
+#   capsule -> cutlery (elongated; footprint is a line segment, not a point,
+#              so `radius_m` here is the CROSS-SECTION radius (6mm), not a
+#              bounding circle -- collision-avoidance treats it as the real
+#              12cm-long shape it is, not an oversized circle, so cutlery can
+#              actually pack close together the way real utensils do).
+#
+# Note: plate/cup/bottle are circularly symmetric, so their `yaw` range is
+# cosmetically/physically a no-op -- included only so every object has the
+# same schema (useful if a future asset swap makes one of them non-round).
+# ---------------------------------------------------------------------------
+objects:
+  plate:
+    shape: circle
+    radius_m: 0.09
+    x: [-0.39, 0.39]
+    y: [-0.24, 0.24]
+    yaw: [-0.3, 0.3]
+
+  cup:
+    shape: circle
+    radius_m: 0.03
+    x: [-0.45, 0.45]
+    y: [-0.30, 0.30]
+    yaw: [-0.3, 0.3]
+
+  bottle:
+    shape: circle
+    radius_m: 0.025
+    x: [-0.455, 0.455]
+    y: [-0.305, 0.305]
+    yaw: [-0.3, 0.3]
+
+  spoon_1:
+    shape: capsule
+    radius_m: 0.006
+    half_length_m: 0.06
+    x: [-0.414, 0.414]
+    y: [-0.264, 0.264]
+    yaw: [-0.8, 0.8]
+
+  spoon_2:
+    shape: capsule
+    radius_m: 0.006
+    half_length_m: 0.06
+    x: [-0.414, 0.414]
+    y: [-0.264, 0.264]
+    yaw: [-0.8, 0.8]
+
+  fork_1:
+    shape: capsule
+    radius_m: 0.006
+    half_length_m: 0.06
+    x: [-0.414, 0.414]
+    y: [-0.264, 0.264]
+    yaw: [-0.8, 0.8]
+
+  fork_2:
+    shape: capsule
+    radius_m: 0.006
+    half_length_m: 0.06
+    x: [-0.414, 0.414]
+    y: [-0.264, 0.264]
+    yaw: [-0.8, 0.8]
+
+# Non-spatial randomization axes -- unchanged, still global (not per-object;
+# mass/friction/shape don't need per-object ranges the way placement did).
+ranges:
   mass_scale: [0.7, 1.3]          # multiplier on nominal object mass
   friction_scale: [0.6, 1.4]      # multiplier on nominal sliding friction
   shape_scale: [0.9, 1.1]         # uniform scale on manipulable geoms
