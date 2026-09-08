@@ -7,23 +7,14 @@
 
 ## 🇬🇧 English
 
-### 1. First-time setup
+### 1. Push policy
 
-After cloning, install the shared git hooks **once**:
+`main` is unprotected: everyone pushes freely, direct commits included. No
+required Pull Request, no branch restrictions.
 
-```bash
-git clone https://github.com/Akaired/infra-summit-vla.git
-cd infra-summit-vla
-./scripts/setup-hooks.sh
-```
+### 2. Branch naming (convention, not enforced)
 
-That points git at the versioned `.githooks/` directory
-(`git config core.hooksPath .githooks`). Without it you lose the local warning
-described in §4 — the GitHub-side protection still applies either way.
-
-### 2. Branch naming
-
-One branch per contributor/feature:
+One branch per contributor/feature is still the suggested convention:
 
 ```
 feature/<short-description>
@@ -39,45 +30,10 @@ Planned split for this project:
 | `feature/eval-benchmark` | 10-seed eval harness + Intel benchmark script |
 | `feature/demo-viewer` | Optional local viewer / capture tooling |
 
-### 3. Workflow
+Direct commits to `main` are fine too — use your judgement on when a feature
+branch is worth it.
 
-```bash
-git checkout main
-git pull
-git checkout -b feature/my-feature
-# ... commit your work ...
-git push -u origin feature/my-feature
-```
-
-Then open a Pull Request on GitHub. **Davide (@Akaired) reviews and merges.**
-Nobody merges their own PR into `main`.
-
-### 4. `main` is protected — two layers
-
-**Layer 1 — GitHub branch protection (the real enforcement).**
-`main` requires a Pull Request, rejects force-pushes, and rejects branch
-deletion. A direct push is refused by the server with GitHub's standard English
-message, roughly:
-
-```
-remote: error: GH006: Protected branch update failed for refs/heads/main.
-```
-
-That message **cannot be customised**: github.com does not support custom
-server-side `pre-receive` hooks — those exist only on GitHub Enterprise Server.
-
-**Layer 2 — the local `pre-push` hook (a reminder, not enforcement).**
-Because the server message cannot be translated, `.githooks/pre-push` catches the
-push *before* it leaves your machine and explains the policy in English and
-Russian. It exits non-zero and the push never happens.
-
-Understand the difference: the hook is a courtesy that makes the failure
-readable. **It is not the security boundary.** Anyone can skip it with
-`git push --no-verify`, or simply never run `setup-hooks.sh` — and `main` is
-still protected, because layer 1 lives on GitHub and does not depend on anything
-in your working copy.
-
-### 5. Code rules that get PRs rejected
+### 3. Code rules that get PRs rejected (when you do open one)
 
 - **No hardcoded values.** Scene/asset paths, seeds, randomization ranges, model
   checkpoint names, inference device (CPU/iGPU/NPU), precision, thresholds — all
@@ -87,7 +43,7 @@ in your working copy.
 - **Log per episode.** Instruction, seed, subtask completion, outcome, timing —
   the submission's success-rate summary is built from those logs.
 
-### 6. Do not decide these alone
+### 4. Do not decide these alone
 
 The base policy, the demonstration-data source, the reasoning split, and the
 target precision/device are open team questions (PRD §7). Raise them; don't
@@ -97,23 +53,14 @@ quietly pick one in a PR.
 
 ## 🇷🇺 Русский
 
-### 1. Первоначальная настройка
+### 1. Политика пушей
 
-После клонирования **один раз** установите общие git-хуки:
+Ветка `main` не защищена: все пушат свободно, включая прямые коммиты. PR не
+обязателен, ограничений на ветки нет.
 
-```bash
-git clone https://github.com/Akaired/infra-summit-vla.git
-cd infra-summit-vla
-./scripts/setup-hooks.sh
-```
+### 2. Именование веток (рекомендация, не требование)
 
-Скрипт указывает git на каталог `.githooks/`, который хранится в репозитории
-(`git config core.hooksPath .githooks`). Без этого вы не увидите локальное
-предупреждение из §4 — защита на стороне GitHub при этом действует в любом случае.
-
-### 2. Именование веток
-
-Одна ветка на участника/задачу:
+Одна ветка на участника/задачу по-прежнему рекомендуется:
 
 ```
 feature/<краткое-описание>
@@ -129,44 +76,9 @@ feature/<краткое-описание>
 | `feature/eval-benchmark` | Оценка на 10 сидах + бенчмарк для Intel |
 | `feature/demo-viewer` | Опциональный локальный просмотрщик |
 
-### 3. Рабочий процесс
+Прямые коммиты в `main` тоже допустимы — решайте сами, когда нужна отдельная ветка.
 
-```bash
-git checkout main
-git pull
-git checkout -b feature/моя-задача
-# ... коммиты ...
-git push -u origin feature/моя-задача
-```
-
-Затем откройте Pull Request на GitHub. **Проверяет и мержит Davide (@Akaired).**
-Никто не мержит собственный PR в `main`.
-
-### 4. Ветка `main` защищена — два уровня
-
-**Уровень 1 — branch protection на GitHub (настоящая защита).**
-Для `main` обязателен Pull Request, force-push и удаление ветки запрещены.
-Прямой пуш отклоняется сервером стандартным сообщением GitHub на английском:
-
-```
-remote: error: GH006: Protected branch update failed for refs/heads/main.
-```
-
-Это сообщение **нельзя изменить**: github.com не поддерживает пользовательские
-серверные хуки `pre-receive` — они есть только в GitHub Enterprise Server.
-
-**Уровень 2 — локальный хук `pre-push` (напоминание, а не защита).**
-Поскольку серверное сообщение нельзя перевести, `.githooks/pre-push`
-перехватывает пуш ещё *до* отправки с вашей машины и объясняет правила
-по-английски и по-русски. Он завершается с ненулевым кодом, и пуш не выполняется.
-
-Важно понимать разницу: хук — это удобство, которое делает ошибку понятной.
-**Он не является границей безопасности.** Его можно обойти командой
-`git push --no-verify` или просто не запускать `setup-hooks.sh` — и `main`
-всё равно останется защищённой, потому что уровень 1 живёт на GitHub и не
-зависит от вашей рабочей копии.
-
-### 5. Из-за чего PR отклоняют
+### 3. Из-за чего PR отклоняют (если всё же открываете PR)
 
 - **Никаких захардкоженных значений.** Пути к сцене и ассетам, сиды, диапазоны
   рандомизации, имена чекпоинтов, устройство инференса (CPU/iGPU/NPU), точность,
@@ -177,7 +89,7 @@ remote: error: GH006: Protected branch update failed for refs/heads/main.
 - **Логируйте каждый эпизод.** Инструкция, сид, выполненные подзадачи, результат,
   тайминги — итоговая статистика успеха собирается из этих логов.
 
-### 6. Что нельзя решать в одиночку
+### 4. Что нельзя решать в одиночку
 
 Базовая политика, источник демонстрационных данных, распределение «рассуждения»
 между политикой и отдельным LLM/VLM-слоем, целевая точность и устройство —
