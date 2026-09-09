@@ -225,7 +225,13 @@ def check_drawer_clearance(randomizer, model, data):
     return ok, "OK (cutlery clear of drawer zone)" if ok else "FAIL:\n    " + "\n    ".join(failures)
 
 
-def check_self_collision(model, data):
+def check_self_collision(model, data, max_penetration_m=0.001):
+    """Real overlap only -- not the small sub-mm 'touching' every resting
+    contact shows in MuJoCo's solver (that's the normal representation of
+    contact, not instability). Verified directly: the real SO-101's
+    equilibrium pose shows 8 left/right contacts, all under 0.3mm -- a
+    zero-tolerance check flags this every time despite nothing being
+    physically wrong."""
     left_geoms, right_geoms = set(), set()
     for gid in range(model.ngeom):
         bname = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, model.geom_bodyid[gid]) or ""
@@ -233,13 +239,15 @@ def check_self_collision(model, data):
             left_geoms.add(gid)
         elif bname.startswith("right_"):
             right_geoms.add(gid)
-    cross = sum(
-        1 for c in range(data.ncon)
-        if (data.contact[c].geom1 in left_geoms and data.contact[c].geom2 in right_geoms)
-        or (data.contact[c].geom1 in right_geoms and data.contact[c].geom2 in left_geoms)
-    )
-    ok = cross == 0
-    return ok, "OK" if ok else f"FAIL: {cross} left/right contacts"
+    real_hits = [
+        data.contact[c].dist for c in range(data.ncon)
+        if ((data.contact[c].geom1 in left_geoms and data.contact[c].geom2 in right_geoms)
+            or (data.contact[c].geom1 in right_geoms and data.contact[c].geom2 in left_geoms))
+        and data.contact[c].dist < -max_penetration_m
+    ]
+    ok = len(real_hits) == 0
+    msg = "OK" if ok else f"FAIL: {len(real_hits)} contacts deeper than {max_penetration_m*1000:.1f}mm (worst: {min(real_hits)*1000:.2f}mm)"
+    return ok, msg
 
 
 def reset_pre_settle(randomizer, model, data, seed):

@@ -55,7 +55,7 @@ placement:
   # full redesign rationale -- this replaces the old center=0.32/half=0.09
   # which put the closed drawer 6cm past the table edge).
   drawer_avoidance:
-    drawer_y_center_m: 0.27
+    drawer_y_center_m: 0.15
     drawer_half_extent_y_m: 0.08
     extra_margin_m: 0.03
 
@@ -89,7 +89,7 @@ placement:
     # even spacing, not by independent random placement + fallback search.
     # Capping at 2 keeps placement comfortably, reliably solvable.
     max_items_in_drawer: 2
-    world_y_center_closed_m: 0.27
+    world_y_center_closed_m: 0.15
     cavity_x: [-0.043, 0.043]
     cavity_y: [-0.054, 0.054]
     cavity_yaw: [-0.15, 0.15]   # aligns long axis with cavity's X (yaw=0 now)
@@ -119,61 +119,61 @@ objects:
   bowl:
     shape: circle
     radius_m: 0.085
-    x: [-0.395, 0.395]
-    y: [-0.245, 0.245]
+    x: [-0.215, 0.215]
+    y: [-0.125, 0.125]
     yaw: [-0.3, 0.3]
 
   plate:
     shape: circle
     radius_m: 0.09
-    x: [-0.39, 0.39]
-    y: [-0.24, 0.24]
+    x: [-0.210, 0.210]
+    y: [-0.120, 0.120]
     yaw: [-0.3, 0.3]
 
   cup:
     shape: circle
     radius_m: 0.03
-    x: [-0.45, 0.45]
-    y: [-0.30, 0.30]
+    x: [-0.270, 0.270]
+    y: [-0.180, 0.180]
     yaw: [-0.3, 0.3]
 
   bottle:
     shape: circle
     radius_m: 0.025
-    x: [-0.455, 0.455]
-    y: [-0.305, 0.305]
+    x: [-0.275, 0.275]
+    y: [-0.185, 0.185]
     yaw: [-0.3, 0.3]
 
   spoon_1:
     shape: capsule
     radius_m: 0.0055
     half_length_m: 0.0625
-    x: [-0.37, 0.37]
-    y: [-0.22, 0.22]
+    x: [-0.191, 0.191]
+    y: [-0.101, 0.101]
     yaw: [-0.8, 0.8]
 
   spoon_2:
     shape: capsule
     radius_m: 0.0055
     half_length_m: 0.0625
-    x: [-0.37, 0.37]
-    y: [-0.22, 0.22]
+    x: [-0.191, 0.191]
+    y: [-0.101, 0.101]
     yaw: [-0.8, 0.8]
 
   fork_1:
     shape: capsule
     radius_m: 0.004
     half_length_m: 0.0525
-    x: [-0.37, 0.37]
-    y: [-0.22, 0.22]
+    x: [-0.191, 0.191]
+    y: [-0.101, 0.101]
     yaw: [-0.8, 0.8]
 
   fork_2:
     shape: capsule
     radius_m: 0.004
     half_length_m: 0.0525
-    x: [-0.37, 0.37]
-    y: [-0.22, 0.22]
+    x: [-0.191, 0.191]
+    y: [-0.101, 0.101]
     yaw: [-0.8, 0.8]
 
 # Non-spatial randomization axes -- unchanged, still global (not per-object;
