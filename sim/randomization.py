@@ -70,10 +70,36 @@ class NominalState:
 # 2D collision geometry: circles and line segments, in table-local XY.
 # --------------------------------------------------------------------------- #
 def _capsule_endpoints(center_xy, yaw, half_length):
-    """World-XY endpoints of a cutlery capsule at (x, y, yaw)."""
-    direction = np.array([-math.sin(yaw), math.cos(yaw)])
+    """World-XY endpoints at (x, y, yaw). Flat orientation maps the mesh's
+    long axis to world +X at yaw=0 (see compute_flat_quat), so direction
+    rotates from there."""
+    direction = np.array([math.cos(yaw), math.sin(yaw)])
     center = np.asarray(center_xy)
     return center - half_length * direction, center + half_length * direction
+
+
+def _compute_flat_quat(verts: np.ndarray) -> np.ndarray:
+    """PCA on mesh vertices: longest axis -> world X, thinnest -> world Z.
+    Lays an elongated mesh flat regardless of the mesh's own local frame."""
+    c = verts - verts.mean(axis=0)
+    _, evecs = np.linalg.eigh(c.T @ c)  # ascending eigenvalues
+    thin, mid, long = evecs[:, 0], evecs[:, 1], evecs[:, 2]
+    R = np.column_stack([long, mid, thin]).T
+    if np.linalg.det(R) < 0:
+        R[2, :] *= -1
+    q = np.zeros(4)
+    mujoco.mju_mat2Quat(q, R.flatten())
+    return q
+
+
+def _flip_about_long_axis(q: np.ndarray) -> np.ndarray:
+    """180deg about the long axis, applied AFTER q establishes world-X
+    alignment (flip is the outer/second-applied rotation) -- not before,
+    which would flip about the mesh's raw unaligned local axis instead."""
+    flip = np.array([0.0, 1.0, 0.0, 0.0])
+    out = np.zeros(4)
+    mujoco.mju_mulQuat(out, flip, q)
+    return out
 
 
 def _point_segment_dist(p, a, b):
@@ -160,6 +186,7 @@ class DomainRandomizer:
         # episode actually need to open the drawer"), not just internal.
         self._compute_robot_equilibrium_pose()
         self._capture_nominal()
+        self._compute_flat_orientations()
 
     # ------------------------------------------------------------------ #
     def _capture_nominal(self):
@@ -464,20 +491,20 @@ class DomainRandomizer:
 
     # ------------------------------------------------------------------ #
     def _placement_radius(self, name) -> float:
-        """Radius to use for placement checks -- reads the LIVE geom_size
-        for primitive-geom objects (bottle: cylinder, cutlery: capsule),
-        which (now that _randomize_shape runs BEFORE placement, see reset())
-        already reflects this seed's actual sampled shape_scale. Exact, not
-        a worst-case guess.
-
-        For mesh-based objects (bowl/plate/cup): writing geom_size on a mesh
-        geom has NO effect on its actual collision geometry (verified
-        directly -- a 5x geom_size write left geom_rbound completely
-        unchanged, because mesh collision comes from mesh_vert, not
-        geom_size). shape_scale is therefore currently a no-op for these
-        three objects regardless of execution order; the static yaml
-        radius_m is already exact and there's nothing live to read.
+        """Radius to use for placement checks. Priority:
+        1. Measured from the actual mesh (self._mesh_radius, computed once
+           via PCA in _compute_flat_orientations) -- for cutlery. This is
+           the source of truth; a hand-measured/yaml value can silently
+           drift out of sync with the real asset (verified: the fork's
+           real PCA length is 0.198m, nearly double a stale 0.105m yaml
+           value, which caused real wall penetration in the drawer).
+        2. LIVE geom_size for primitive-geom objects (bottle: cylinder),
+           which reflects this seed's actual shape_scale.
+        3. Static yaml radius_m -- for mesh objects with no live geom_size
+           (bowl/plate/cup; shape_scale is a no-op for these, see below).
         """
+        if hasattr(self, "_mesh_radius") and name in self._mesh_radius:
+            return self._mesh_radius[name]
         cfg = self.object_cfg[name]
         bid = self.model.body(name).id
         for gid in range(self.model.ngeom):
@@ -487,7 +514,9 @@ class DomainRandomizer:
 
     def _placement_half_length(self, name) -> float:
         """Capsule half-length counterpart to _placement_radius -- same
-        live-vs-static reasoning."""
+        measured-mesh-first priority."""
+        if hasattr(self, "_mesh_half_length") and name in self._mesh_half_length:
+            return self._mesh_half_length[name]
         cfg = self.object_cfg[name]
         bid = self.model.body(name).id
         for gid in range(self.model.ngeom):
@@ -562,6 +591,94 @@ class DomainRandomizer:
     def _cutlery_names(self):
         return [n for n in self.object_names if self.object_cfg[n]["shape"] == "capsule"]
 
+    def _mesh_verts_for_body(self, name, collision_only=True):
+        bid = self.model.body(name).id
+        verts = []
+        for gid in range(self.model.ngeom):
+            if self.model.geom_bodyid[gid] != bid or self.model.geom_type[gid] != mujoco.mjtGeom.mjGEOM_MESH:
+                continue
+            if collision_only and self.model.geom_contype[gid] == 0:
+                continue  # skip visual-only geoms -- they never generate contact,
+                          # so including them overstates the collision-relevant extent
+            mid = self.model.geom_dataid[gid]
+            v = self.model.mesh_vert[self.model.mesh_vertadr[mid]:
+                                      self.model.mesh_vertadr[mid] + self.model.mesh_vertnum[mid]]
+            gpos = self.model.geom_pos[gid]
+            gquat = self.model.geom_quat[gid]
+            rot = np.zeros(9)
+            mujoco.mju_quat2Mat(rot, gquat)
+            v_in_body = (rot.reshape(3, 3) @ v.T).T + gpos
+            verts.append(v_in_body)
+        return np.concatenate(verts, axis=0)
+
+    def _settle_upright_z(self, name, quat, steps=1500):
+        """Drop `name` alone at a safe spot with the given base quat, return
+        |z-component of its long axis| after settling. Lower = flatter."""
+        data = mujoco.MjData(self.model)
+        bid = self.model.body(name).id
+        jnt_adr = self.model.body_jntadr[bid]
+        qpos_adr = self.model.jnt_qposadr[jnt_adr]
+        for other in self.object_names:
+            if other == name:
+                continue
+            oadr = self.model.jnt_qposadr[self.model.body_jntadr[self.model.body(other).id]]
+            data.qpos[oadr:oadr + 3] = [100.0, 100.0, 100.0]
+        data.qpos[qpos_adr:qpos_adr + 3] = [0.0, -0.28, 0.85]
+        data.qpos[qpos_adr + 3:qpos_adr + 7] = quat
+        mujoco.mj_forward(self.model, data)
+        for _ in range(steps):
+            mujoco.mj_step(self.model, data)
+        rot = np.zeros(9)
+        mujoco.mju_quat2Mat(rot, data.qpos[qpos_adr + 3:qpos_adr + 7])
+        long_axis_world = rot.reshape(3, 3) @ np.array([1.0, 0.0, 0.0])
+        return abs(long_axis_world[2])
+
+    def _compute_flat_orientations(self):
+        self._flat_quat = {}
+        self._mesh_half_length = {}
+        self._mesh_radius = {}
+        self._long_eigvec = {}
+        for name in self._cutlery_names():
+            verts = self._mesh_verts_for_body(name)
+            c = verts - verts.mean(axis=0)
+            _, evecs = np.linalg.eigh(c.T @ c)
+            thin, mid, long = evecs[:, 0], evecs[:, 1], evecs[:, 2]
+            long_proj = c @ long
+            thin_proj = c @ thin
+            self._mesh_half_length[name] = float((long_proj.max() - long_proj.min()) / 2)
+            self._mesh_radius[name] = float((thin_proj.max() - thin_proj.min()) / 2)
+            self._long_eigvec[name] = long
+
+            base = _compute_flat_quat(verts)
+            flipped = _flip_about_long_axis(base)
+            z_base = self._settle_upright_z(name, base)
+            z_flip = self._settle_upright_z(name, flipped)
+            chosen = base if z_base <= z_flip else flipped
+            self._flat_quat[name] = chosen
+            rot = np.zeros(9)
+            mujoco.mju_quat2Mat(rot, chosen)
+            self.nominal.up_axis_world[name] = rot.reshape(3, 3) @ np.array([0.0, 0.0, 1.0])
+
+    def true_capsule_endpoints(self, data, name):
+        """Authoritative world-space endpoints of a cutlery item, computed
+        from its ACTUAL current qpos quaternion and the real PCA long axis
+        -- not by extracting an abstract 'yaw' and recomposing (that broke:
+        the object's true reference orientation is the PCA flat quat, not
+        identity, so a generic quaternion-to-yaw formula doesn't recover
+        anything meaningful). Single source of truth, used internally and
+        by tests, so the two can never silently disagree again."""
+        bid = self.model.body(name).id
+        qadr = self.model.jnt_qposadr[self.model.body_jntadr[bid]]
+        pos = data.qpos[qadr:qadr + 3]
+        quat = data.qpos[qadr + 3:qadr + 7]
+        rot = np.zeros(9)
+        mujoco.mju_quat2Mat(rot, quat)
+        world_long = rot.reshape(3, 3) @ self._long_eigvec[name]
+        half_length = self._mesh_half_length[name]
+        p1 = np.array(pos[:2]) - half_length * world_long[:2]
+        p2 = np.array(pos[:2]) + half_length * world_long[:2]
+        return p1, p2
+
     def _decide_drawer_interior(self, rng):
         """Per seed, decide which cutlery items start inside the closed
         drawer instead of on the table. Returns a set of names. Drawn from
@@ -584,31 +701,41 @@ class DomainRandomizer:
         return set(selected[:cap])
 
     def _place_in_drawer(self, data, rng, names, max_attempts):
-        """Rejection-sample cutlery positions inside the closed drawer's
-        cavity, checking only against other in-drawer items (the drawer is
-        closed and isolated from the table/robot at spawn time, so no
-        table-neighbor or robot-collision check applies here -- those only
-        matter for what's reachable right now, and a closed drawer's
-        contents aren't). Position is computed in the drawer's CLOSED
-        world-frame position; since these items are ordinary free-jointed
-        bodies (not parented to the drawer), when the drawer later slides
-        open, normal contact friction carries them along with its floor --
-        no special "attached to drawer" logic needed or wanted."""
         di_cfg = self.placement_cfg["drawer_interior"]
         drawer_y = di_cfg["world_y_center_closed_m"]
-        x_lo, x_hi = di_cfg["cavity_x"]
-        y_lo, y_hi = di_cfg["cavity_y"]
         yaw_lo, yaw_hi = di_cfg["cavity_yaw"]
         local_z = di_cfg["cavity_floor_local_z"]
         world_z = self.model.body("drawer").pos[2] + local_z
         min_gap = self.placement_cfg["min_gap_between_objects_m"]
-        # Tighter space than the open table -- items are long (12cm) relative
-        # to the cavity, so give rejection sampling more room to find a fit
-        # before falling back.
         drawer_max_attempts = max(max_attempts, 500)
+
+        # Sampling range is generous (most of the cavity); ACCEPTANCE is
+        # real collision detection against the drawer walls, not an
+        # estimated reach. Hand-computing reach from mesh dimensions proved
+        # unreliable multiple times (stale measured lengths, and visual vs.
+        # collision mesh extents differing) -- asking MuJoCo directly is the
+        # same proven approach already used for robot-collision avoidance.
+        CAVITY_HALF_X, CAVITY_HALF_Y = 0.114, 0.074
+        sample_margin = 0.01
+        x_lo, x_hi = -(CAVITY_HALF_X - sample_margin), CAVITY_HALF_X - sample_margin
+        y_lo, y_hi = -(CAVITY_HALF_Y - sample_margin), CAVITY_HALF_Y - sample_margin
+
+        wall_names = ["drawer_wall_left", "drawer_wall_right",
+                      "drawer_wall_back", "drawer_wall_front"]
+        wall_geoms = {self.model.geom(n).id for n in wall_names}
+
+        def hits_wall(body_id):
+            for c in range(data.ncon):
+                con = data.contact[c]
+                g1, g2 = con.geom1, con.geom2
+                b1, b2 = self.model.geom_bodyid[g1], self.model.geom_bodyid[g2]
+                if body_id in (b1, b2) and (g1 in wall_geoms or g2 in wall_geoms):
+                    return True
+            return False
 
         placed_in_drawer: list[Footprint] = []
         for name in names:
+            bid = self.model.body(name).id
             accepted = None
             for _ in range(drawer_max_attempts):
                 x = rng.uniform(x_lo, x_hi)
@@ -617,25 +744,25 @@ class DomainRandomizer:
                 fp = self._make_footprint(name, x, y, yaw)
                 if any(_footprint_gap(fp, other) < min_gap for other in placed_in_drawer):
                     continue
+                self._apply_pose(data, name, x, y, yaw)
+                self._set_object_z(data, name, world_z)
+                mujoco.mj_forward(self.model, data)
+                if hits_wall(bid):
+                    continue
                 accepted = (x, y, yaw, fp)
                 break
             if accepted is None:
-                # Deterministic 2D grid search over (x, y), not just y at a
-                # fixed x=0. The first item can land at any x/yaw from the
-                # random pass, so the remaining free space for a second item
-                # isn't necessarily a clean band along y at x=0 -- it can be
-                # a diagonal sliver. A y-only search at fixed x sometimes
-                # missed exactly that sliver (found empirically: 5/1000
-                # seeds failed with gaps of 0.019-0.0200m, just under the
-                # 0.02m requirement -- a 2D search covers those cases a 1D
-                # search structurally cannot). Checks each candidate against
-                # where items ACTUALLY landed, not an assumed layout.
                 yaw_mid = (yaw_lo + yaw_hi) / 2
                 grid_accepted = None
                 for x_candidate in np.linspace(x_lo, x_hi, 15):
                     for y_candidate in np.linspace(y_lo, y_hi, 15) + drawer_y:
                         fp = self._make_footprint(name, x_candidate, y_candidate, yaw_mid)
                         if any(_footprint_gap(fp, other) < min_gap for other in placed_in_drawer):
+                            continue
+                        self._apply_pose(data, name, x_candidate, y_candidate, yaw_mid)
+                        self._set_object_z(data, name, world_z)
+                        mujoco.mj_forward(self.model, data)
+                        if hits_wall(bid):
                             continue
                         grid_accepted = (x_candidate, y_candidate, yaw_mid, fp)
                         break
@@ -646,16 +773,13 @@ class DomainRandomizer:
                           f"2D grid-search fallback after {drawer_max_attempts} random attempts")
                     accepted = grid_accepted
                 else:
-                    # Cavity is genuinely full (more items than comfortably
-                    # fit) -- no valid slot exists at all even on a 225-point
-                    # grid. Loud, not silent: this means fewer items should
-                    # be sent to the drawer, not that this item's overlap
-                    # should be hidden.
                     print(f"[randomization] WARNING: drawer interior has no "
                           f"valid slot left for '{name}' -- cavity may be "
                           f"over-subscribed for this seed's item count")
                     y = drawer_y
                     fp = self._make_footprint(name, 0.0, y, yaw_mid)
+                    self._apply_pose(data, name, 0.0, y, yaw_mid)
+                    self._set_object_z(data, name, world_z)
                     accepted = (0.0, y, yaw_mid, fp)
             x, y, yaw, fp = accepted
             placed_in_drawer.append(fp)
@@ -777,14 +901,14 @@ class DomainRandomizer:
         qpos_adr = self.model.jnt_qposadr[jnt_adr]
 
         nominal_pos = self.nominal.body_pos[name]
-        nominal_quat = self.nominal.body_quat[name]
+        base_quat = self._flat_quat[name] if name in self._flat_quat else self.nominal.body_quat[name]
 
         new_pos = np.array([x, y, nominal_pos[2]])
 
         yaw_quat = np.zeros(4)
         mujoco.mju_axisAngle2Quat(yaw_quat, np.array([0.0, 0.0, 1.0]), dyaw)
         new_quat = np.zeros(4)
-        mujoco.mju_mulQuat(new_quat, yaw_quat, nominal_quat)
+        mujoco.mju_mulQuat(new_quat, yaw_quat, base_quat)
 
         data.qpos[qpos_adr:qpos_adr + 3] = new_pos
         data.qpos[qpos_adr + 3:qpos_adr + 7] = new_quat

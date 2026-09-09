@@ -92,7 +92,7 @@ placement:
     world_y_center_closed_m: 0.27
     cavity_x: [-0.043, 0.043]
     cavity_y: [-0.054, 0.054]
-    cavity_yaw: [1.4208, 1.7208]   # ~90deg +/- 0.15 rad, aligns long axis with cavity's X
+    cavity_yaw: [-0.15, 0.15]   # aligns long axis with cavity's X (yaw=0 now)
     cavity_floor_local_z: -0.028   # floor TOP surface (-0.034) + capsule radius (0.006).
                                    # NOT the floor surface itself -- putting the capsule CENTER
                                    # on the surface buries half of it, which produced 6mm of
@@ -146,34 +146,34 @@ objects:
 
   spoon_1:
     shape: capsule
-    radius_m: 0.006
-    half_length_m: 0.06
-    x: [-0.414, 0.414]
-    y: [-0.264, 0.264]
+    radius_m: 0.0055
+    half_length_m: 0.0625
+    x: [-0.37, 0.37]
+    y: [-0.22, 0.22]
     yaw: [-0.8, 0.8]
 
   spoon_2:
     shape: capsule
-    radius_m: 0.006
-    half_length_m: 0.06
-    x: [-0.414, 0.414]
-    y: [-0.264, 0.264]
+    radius_m: 0.0055
+    half_length_m: 0.0625
+    x: [-0.37, 0.37]
+    y: [-0.22, 0.22]
     yaw: [-0.8, 0.8]
 
   fork_1:
     shape: capsule
-    radius_m: 0.006
-    half_length_m: 0.06
-    x: [-0.414, 0.414]
-    y: [-0.264, 0.264]
+    radius_m: 0.004
+    half_length_m: 0.0525
+    x: [-0.37, 0.37]
+    y: [-0.22, 0.22]
     yaw: [-0.8, 0.8]
 
   fork_2:
     shape: capsule
-    radius_m: 0.006
-    half_length_m: 0.06
-    x: [-0.414, 0.414]
-    y: [-0.264, 0.264]
+    radius_m: 0.004
+    half_length_m: 0.0525
+    x: [-0.37, 0.37]
+    y: [-0.22, 0.22]
     yaw: [-0.8, 0.8]
 
 # Non-spatial randomization axes -- unchanged, still global (not per-object;

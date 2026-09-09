@@ -112,19 +112,22 @@
     <texture name="cup_texture" type="2d" file="g_cups/texture_map.png"/>
     <material name="cup_material" texture="cup_texture"/>
 
-    <mesh name="spoon_visual_mesh" file="spoon/textured.obj" />
-    <mesh name="spoon_collision_mesh_0" file="spoon/textured_coacd_0.stl" />
-    <mesh name="spoon_collision_mesh_1" file="spoon/textured_coacd_1.stl" />
-    <mesh name="spoon_collision_mesh_2" file="spoon/textured_coacd_2.stl" />
-    <mesh name="spoon_collision_mesh_3" file="spoon/textured_coacd_3.stl" />
-    <texture name="spoon_texture" type="2d" file="spoon/texture_map.png" />
-    <material name="spoon_material" texture="spoon_texture" />
+    <!-- Spoon and fork share ONE mesh/material per shape (spoon_1/spoon_2
+         both reference spoon_visual_mesh, etc) -- two separate body
+         INSTANCES, one shared asset each, same pattern as any repeated prop. -->
+    <mesh name="spoon_visual_mesh" file="spoon/textured.obj"/>
+    <mesh name="spoon_collision_mesh_0" file="spoon/textured_coacd_0.stl"/>
+    <mesh name="spoon_collision_mesh_1" file="spoon/textured_coacd_1.stl"/>
+    <mesh name="spoon_collision_mesh_2" file="spoon/textured_coacd_2.stl"/>
+    <mesh name="spoon_collision_mesh_3" file="spoon/textured_coacd_3.stl"/>
+    <texture name="spoon_texture" type="2d" file="spoon/texture_map.png"/>
+    <material name="spoon_material" texture="spoon_texture"/>
 
-    <mesh name="fork_visual_mesh" file="fork/textured.obj" />
-    <mesh name="fork_collision_mesh_0" file="fork/textured_coacd_0.stl" />
-    <mesh name="fork_collision_mesh_1" file="fork/textured_coacd_1.stl" />
-    <texture name="fork_texture" type="2d" file="fork/texture_map.png" />
-    <material name="fork_material" texture="fork_texture" />
+    <mesh name="fork_visual_mesh" file="fork/textured.obj"/>
+    <mesh name="fork_collision_mesh_0" file="fork/textured_coacd_0.stl"/>
+    <mesh name="fork_collision_mesh_1" file="fork/textured_coacd_1.stl"/>
+    <texture name="fork_texture" type="2d" file="fork/texture_map.png"/>
+    <material name="fork_material" texture="fork_texture"/>
   </asset>
 
   <worldbody>
@@ -260,37 +263,33 @@
       capsule radius (0.006) = 0.776, so it rests exactly on the surface
       instead of floating above it or clipping into it.
     -->
-    <body name="spoon_1" pos="-0.05 0.05 0.776" euler="-1.5708 0 0.05">
-      <joint type = 'free' class="manip_object"/>
-      <geom name="spoon_1_visual" type="mesh" mesh="spoon_visual_mesh" material="spoon_material" contype="0" conaffinity="0" group="0"/>
-      <geom name="spoon_1_coll_0" type="mesh" mesh="spoon_collision_mesh_0" contype="1" conaffinity="1" group="3"/>
-      <geom name="spoon_1_coll_1" type="mesh" mesh="spoon_collision_mesh_1" contype="1" conaffinity="1" group="3"/>
-      <geom name="spoon_1_coll_2" type="mesh" mesh="spoon_collision_mesh_2" contype="1" conaffinity="1" group="3"/>
-      <geom name="spoon_1_coll_3" type="mesh" mesh="spoon_collision_mesh_3" contype="1" conaffinity="1" group="3"/>
-      <inertial pos="0 0 0" mass="0.03" diaginertia="0.001 0.001 0.001"/>
+    <body name="spoon_1" pos="-0.05 0.05 0.7805" euler="0 0 0">
+      <joint type="free" class="manip_object"/>
+      <geom name="spoon_1_visual" type="mesh" mesh="spoon_visual_mesh" material="spoon_material" pos="0 0 0" contype="0" conaffinity="0" group="0"/>
+      <geom name="spoon_1_coll_0" type="mesh" mesh="spoon_collision_mesh_0" pos="0 0 0" density="700" contype="1" conaffinity="1" group="3"/>
+      <geom name="spoon_1_coll_1" type="mesh" mesh="spoon_collision_mesh_1" pos="0 0 0" density="700" contype="1" conaffinity="1" group="3"/>
+      <geom name="spoon_1_coll_2" type="mesh" mesh="spoon_collision_mesh_2" pos="0 0 0" density="700" contype="1" conaffinity="1" group="3"/>
+      <geom name="spoon_1_coll_3" type="mesh" mesh="spoon_collision_mesh_3" pos="0 0 0" density="700" contype="1" conaffinity="1" group="3"/>
     </body>
-    <body name="spoon_2" pos="-0.02 0.05 0.776" euler="-1.5708 0 -0.05">
-      <joint type = 'free' class="manip_object"/>
-      <geom name="spoon_2_visual" type="mesh" mesh="spoon_visual_mesh" material="spoon_material" contype="0" conaffinity="0" group="0"/>
-      <geom name="spoon_2_coll_0" type="mesh" mesh="spoon_collision_mesh_0" contype="1" conaffinity="1" group="3"/>
-      <geom name="spoon_2_coll_1" type="mesh" mesh="spoon_collision_mesh_1" contype="1" conaffinity="1" group="3"/>
-      <geom name="spoon_2_coll_2" type="mesh" mesh="spoon_collision_mesh_2" contype="1" conaffinity="1" group="3"/>
-      <geom name="spoon_2_coll_3" type="mesh" mesh="spoon_collision_mesh_3" contype="1" conaffinity="1" group="3"/>
-      <inertial pos="0 0 0" mass="0.03" diaginertia="0.001 0.001 0.001"/>
+    <body name="spoon_2" pos="-0.02 0.05 0.7805" euler="0 0 0">
+      <joint type="free" class="manip_object"/>
+      <geom name="spoon_2_visual" type="mesh" mesh="spoon_visual_mesh" material="spoon_material" pos="0 0 0" contype="0" conaffinity="0" group="0"/>
+      <geom name="spoon_2_coll_0" type="mesh" mesh="spoon_collision_mesh_0" pos="0 0 0" density="700" contype="1" conaffinity="1" group="3"/>
+      <geom name="spoon_2_coll_1" type="mesh" mesh="spoon_collision_mesh_1" pos="0 0 0" density="700" contype="1" conaffinity="1" group="3"/>
+      <geom name="spoon_2_coll_2" type="mesh" mesh="spoon_collision_mesh_2" pos="0 0 0" density="700" contype="1" conaffinity="1" group="3"/>
+      <geom name="spoon_2_coll_3" type="mesh" mesh="spoon_collision_mesh_3" pos="0 0 0" density="700" contype="1" conaffinity="1" group="3"/>
     </body>
-    <body name="fork_1" pos="0.02 0.05 0.776" euler="-1.5708 0 0.05">
-      <joint type = 'free' class="manip_object"/>
-      <geom name="fork_1_visual_geom" type="mesh" mesh="fork_visual_mesh" material="fork_material" pos="-0.0 0.0 -0.0" euler="0 0 0" contype="0" conaffinity="0" group="0" />
-      <geom name="fork_1_collision_geom_0" type="mesh" mesh="fork_collision_mesh_0" pos="-0.0 0.0 -0.0" euler="0 0 0" contype="1" conaffinity="1" group="3" />
-      <geom name="fork_1_collision_geom_1" type="mesh" mesh="fork_collision_mesh_1" pos="-0.0 0.0 -0.0" euler="0 0 0" contype="1" conaffinity="1" group="3" />
-      <inertial pos="0 0 0" euler="0 0 0" mass="0.034" diaginertia="0.001 0.001 0.001" />
+    <body name="fork_1" pos="0.02 0.05 0.7773" euler="0 0 0">
+      <joint type="free" class="manip_object"/>
+      <geom name="fork_1_visual" type="mesh" mesh="fork_visual_mesh" material="fork_material" pos="0 0 0" contype="0" conaffinity="0" group="0"/>
+      <geom name="fork_1_coll_0" type="mesh" mesh="fork_collision_mesh_0" pos="0 0 0" density="700" contype="1" conaffinity="1" group="3"/>
+      <geom name="fork_1_coll_1" type="mesh" mesh="fork_collision_mesh_1" pos="0 0 0" density="700" contype="1" conaffinity="1" group="3"/>
     </body>
-    <body name="fork_2" pos="0.05 0.05 0.776" euler="-1.5708 0 -0.05">
-      <joint type = 'free' class="manip_object"/>
-      <geom name="fork_2_visual_geom" type="mesh" mesh="fork_visual_mesh" material="fork_material" pos="-0.0 0.0 -0.0" euler="0 0 0" contype="0" conaffinity="0" group="0" />
-      <geom name="fork_2_collision_geom_0" type="mesh" mesh="fork_collision_mesh_0" pos="-0.0 0.0 -0.0" euler="0 0 0" contype="1" conaffinity="1" group="3" />
-      <geom name="fork_2_collision_geom_1" type="mesh" mesh="fork_collision_mesh_1" pos="-0.0 0.0 -0.0" euler="0 0 0" contype="1" conaffinity="1" group="3" />
-      <inertial pos="0 0 0" euler="0 0 0" mass="0.034" diaginertia="0.001 0.001 0.001" />
+    <body name="fork_2" pos="0.05 0.05 0.7773" euler="0 0 0">
+      <joint type="free" class="manip_object"/>
+      <geom name="fork_2_visual" type="mesh" mesh="fork_visual_mesh" material="fork_material" pos="0 0 0" contype="0" conaffinity="0" group="0"/>
+      <geom name="fork_2_coll_0" type="mesh" mesh="fork_collision_mesh_0" pos="0 0 0" density="700" contype="1" conaffinity="1" group="3"/>
+      <geom name="fork_2_coll_1" type="mesh" mesh="fork_collision_mesh_1" pos="0 0 0" density="700" contype="1" conaffinity="1" group="3"/>
     </body>
 
     <!-- ============ LEFT ARM (prefix must match sim.yaml robot.left_arm_prefix) ============ -->
