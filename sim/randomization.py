@@ -534,17 +534,69 @@ class DomainRandomizer:
         p1, p2 = _capsule_endpoints(center, yaw, half_length)
         return Footprint(shape="capsule", center=center, radius=radius, p1=p1, p2=p2)
 
+    def _robot_base_positions(self):
+        """XY positions of every robot base in the model, found by name
+        pattern ('*_base' bodies that are actual robot mounts, identified
+        via the left/right arm prefixes already used elsewhere) -- not
+        hardcoded coordinates, so this stays correct through any future
+        base repositioning without a code change."""
+        positions = []
+        for bid in range(self.model.nbody):
+            name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_BODY, bid) or ""
+            if name.endswith("_base") and (name.startswith("left_") or name.startswith("right_")):
+                positions.append(self.model.body_pos[bid][:2].copy())
+        return positions
+
+    def _violates_base_keepout(self, footprint: Footprint) -> bool:
+        """True if this footprint's circle (or capsule) comes within the
+        robot base's real physical footprint of any arm base.
+
+        This is NOT the same thing check as _collides_with_environment --
+        that only catches literal mesh overlap after the fact (mj_forward +
+        contact check); this is a proactive, cheap 2D distance check used
+        during the SAME rejection-sampling loop as the object-object gap
+        check, so a bad candidate is rejected before ever calling
+        mj_forward. Found necessary the hard way: a plate placed 7cm from a
+        base center, with its own 8.9cm radius, visually oversat the base
+        (verified: plate's own edge extended 1.9cm past the base's center
+        point) without the existing collision check ever flagging it --
+        real mesh geometry doesn't fill its own bounding sphere, so
+        "no literal mesh contact" and "doesn't visually sit on the base"
+        are different claims. This checks the second one directly.
+
+        Base footprint radius (0.1075m) measured from the actual base
+        geom's bounding sphere, not guessed -- see conversation record.
+        """
+        BASE_FOOTPRINT_RADIUS = 0.1075
+        margin = self.placement_cfg["min_gap_between_objects_m"]
+        for base_xy in self._robot_base_positions():
+            if footprint.shape == "circle":
+                dist = float(np.linalg.norm(footprint.center - base_xy))
+            else:
+                dist = _point_segment_dist(base_xy, footprint.p1, footprint.p2)
+            if dist - footprint.radius - BASE_FOOTPRINT_RADIUS < margin:
+                return True
+        return False
+
     def _violates_drawer_avoidance(self, name, footprint: Footprint) -> bool:
-        cfg = self.object_cfg[name]
-        if cfg["shape"] != "capsule":
-            return False  # soft rule applies to cutlery only, per config docstring
+        """Applies to EVERY object shape, not just cutlery. This rule used
+        to be capsule-only because the drawer sat recessed under the
+        tabletop -- no table-surface object, of any shape, could physically
+        be in its sweep path. That's no longer true: the drawer now sits ON
+        the table surface (verified the hard way -- 26/50 randomized seeds
+        had the drawer blocked from opening, and checking found bowl/plate/
+        cup/bottle sitting in the sweep path, since only capsules were ever
+        checked here)."""
         da = self.placement_cfg.get("drawer_avoidance")
         if not da:
             return False
         drawer_y_min = da["drawer_y_center_m"] - da["drawer_half_extent_y_m"] - da["extra_margin_m"]
-        # Check the capsule's endpoints, not just its center -- a segment can
-        # poke into the exclusion zone even if its center doesn't.
-        return footprint.p1[1] > drawer_y_min or footprint.p2[1] > drawer_y_min
+        if footprint.shape == "capsule":
+            # Check the capsule's endpoints, not just its center -- a
+            # segment can poke into the exclusion zone even if its center
+            # doesn't.
+            return footprint.p1[1] > drawer_y_min or footprint.p2[1] > drawer_y_min
+        return footprint.center[1] + footprint.radius > drawer_y_min
 
     def _collides_with_environment(self, data, candidate_body_id) -> bool:
         """True if the candidate object (already written into data, with
@@ -715,7 +767,7 @@ class DomainRandomizer:
         # unreliable multiple times (stale measured lengths, and visual vs.
         # collision mesh extents differing) -- asking MuJoCo directly is the
         # same proven approach already used for robot-collision avoidance.
-        CAVITY_HALF_X, CAVITY_HALF_Y = 0.114, 0.074
+        CAVITY_HALF_X, CAVITY_HALF_Y = 0.11, 0.075
         sample_margin = 0.01
         x_lo, x_hi = -(CAVITY_HALF_X - sample_margin), CAVITY_HALF_X - sample_margin
         y_lo, y_hi = -(CAVITY_HALF_Y - sample_margin), CAVITY_HALF_Y - sample_margin
@@ -843,6 +895,8 @@ class DomainRandomizer:
 
                 if self._violates_drawer_avoidance(name, fp):
                     continue
+                if self._violates_base_keepout(fp):
+                    continue
                 if any(_footprint_gap(fp, other) < min_gap for other in placed):
                     continue
 
@@ -857,20 +911,50 @@ class DomainRandomizer:
                 break
 
             if accepted is None:
-                # Fall back to nominal pose -- but still verify it, rather
-                # than blindly trusting it. If the robot's own default pose
-                # happens to overlap this object's nominal spawn point too,
-                # silently accepting it would produce exactly the violent
-                # spawn-collision this whole check exists to prevent.
-                fallback_count += 1
-                nominal_pos = self.nominal.body_pos[name]
-                x, y, yaw = float(nominal_pos[0]), float(nominal_pos[1]), 0.0
-                fp = self._make_footprint(name, x, y, yaw)
-                self._apply_pose(data, name, x, y, yaw)
-                mujoco.mj_forward(self.model, data)
-                if self._collides_with_environment(data, bid):
-                    unresolved_robot_collision.append(name)
-                accepted = (x, y, yaw, fp)
+                # Deterministic grid search over this object's own valid
+                # range, same proven pattern as the drawer-interior fallback
+                # (see _place_in_drawer) -- a single nominal-pose fallback
+                # can't satisfy the base keep-out constraint on a crowded
+                # table (verified: 29% overlap rate before this fix, since
+                # one fixed fallback point per object has no way to route
+                # around whatever's already placed). A search over many
+                # candidates can.
+                yaw_mid = (yaw_lo + yaw_hi) / 2
+                grid_accepted = None
+                for x_c in np.linspace(x_lo, x_hi, 12):
+                    for y_c in np.linspace(y_lo, y_hi, 12):
+                        fp = self._make_footprint(name, x_c, y_c, yaw_mid)
+                        if self._violates_drawer_avoidance(name, fp):
+                            continue
+                        if self._violates_base_keepout(fp):
+                            continue
+                        if any(_footprint_gap(fp, other) < min_gap for other in placed):
+                            continue
+                        self._apply_pose(data, name, x_c, y_c, yaw_mid)
+                        mujoco.mj_forward(self.model, data)
+                        if self._collides_with_environment(data, bid):
+                            continue
+                        grid_accepted = (x_c, y_c, yaw_mid, fp)
+                        break
+                    if grid_accepted is not None:
+                        break
+
+                if grid_accepted is not None:
+                    fallback_count += 1
+                    accepted = grid_accepted
+                else:
+                    # Even the grid search found nothing -- fall back to
+                    # nominal pose as a last resort, still verified rather
+                    # than blindly trusted.
+                    fallback_count += 1
+                    nominal_pos = self.nominal.body_pos[name]
+                    x, y, yaw = float(nominal_pos[0]), float(nominal_pos[1]), 0.0
+                    fp = self._make_footprint(name, x, y, yaw)
+                    self._apply_pose(data, name, x, y, yaw)
+                    mujoco.mj_forward(self.model, data)
+                    if self._collides_with_environment(data, bid) or self._violates_base_keepout(fp):
+                        unresolved_robot_collision.append(name)
+                    accepted = (x, y, yaw, fp)
 
             x, y, yaw, fp = accepted
             placed.append(fp)

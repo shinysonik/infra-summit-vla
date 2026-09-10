@@ -28,9 +28,9 @@ from randomization import (
     _footprint_gap,
 )
 
-TABLE_HALF_X = 0.5
-TABLE_HALF_Y = 0.35
-DRAWER_Y_CENTER = 0.27
+TABLE_HALF_X = 0.46
+TABLE_HALF_Y = 0.32
+DRAWER_Y_CENTER = 0.24
 DRAWER_HALF_Y = 0.08
 DRAWER_EXTRA_MARGIN = 0.03
 

@@ -176,7 +176,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--episodes", type=int, default=3)
     parser.add_argument("--repo-id", type=str, default="local/dinner_table_scaffold")
-    parser.add_argument("--root", type=str, default="./demo_dataset_scaffold")
+    parser.add_argument("--root", type=str, default="./data/demo_dataset")
     parser.add_argument("--instruction", type=str,
                          default="open the drawer and set the table")
     parser.add_argument("--seed-offset", type=int, default=0)

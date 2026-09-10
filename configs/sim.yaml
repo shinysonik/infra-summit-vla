@@ -39,18 +39,18 @@ robot:
   # so gravity droop is naturally far smaller. Order matches
   # action_space.yaml `actuators`.
   home_qpos:
-    left_shoulder_pan: -0.04278
-    left_shoulder_lift: -0.05225
-    left_elbow_flex: -0.00273
-    left_wrist_flex: -0.00163
-    left_wrist_roll: 0.00003
-    left_gripper: 0.00086
-    right_shoulder_pan: -0.04055
-    right_shoulder_lift: 0.00286
-    right_elbow_flex: 0.00292
-    right_wrist_flex: 0.00111
-    right_wrist_roll: -0.00006
-    right_gripper: -0.00017
+    left_shoulder_pan: 0.00000
+    left_shoulder_lift: 0.00062
+    left_elbow_flex: 0.00053
+    left_wrist_flex: 0.00014
+    left_wrist_roll: 0.00002
+    left_gripper: -0.00000
+    right_shoulder_pan: 0.00000
+    right_shoulder_lift: 0.00062
+    right_elbow_flex: 0.00053
+    right_wrist_flex: 0.00014
+    right_wrist_roll: 0.00002
+    right_gripper: -0.00000
 
 # Objects the dinner-table task manipulates. Names must match MJCF bodies.
 objects:
