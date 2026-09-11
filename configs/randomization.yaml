@@ -22,7 +22,7 @@ training:
 placement:
   table_half_extent_m: [0.46, 0.32]
   margin_from_table_edge_m: 0.02
-  min_gap_between_objects_m: 0.02
+  min_gap_between_objects_m: 0.018
   max_attempts: 3000
   settle_max_steps: 500
   settle_velocity_threshold: 0.01
@@ -44,45 +44,46 @@ placement:
   drawer_avoidance:
     drawer_y_center_m: 0.24
     drawer_half_extent_y_m: 0.075
-    extra_margin_m: 0.18
+    extra_margin_m: 0.16
 
   drawer_interior:
     enabled: true
     fraction_in_drawer: 0.4
-    max_items_in_drawer: 2
+    max_items_in_drawer: 1
     world_y_center_closed_m: 0.24
     cavity_x: [-0.043, 0.043]
-    cavity_y: [-0.054, 0.054]
+    cavity_y: [-0.054, -0.02]
     cavity_yaw: [-0.15, 0.15]
     cavity_floor_local_z: -0.028
 
 objects:
+
   bowl:
     shape: circle
     radius_m: 0.085
     x: [-0.355, 0.355]
-    y: [-0.215, -0.03]
+    y: [-0.10, 0.215]
     yaw: [-0.3, 0.3]
 
   plate:
     shape: circle
     radius_m: 0.089
     x: [-0.351, 0.351]
-    y: [-0.211, -0.03]
+    y: [-0.10, 0.211]
+    yaw: [-0.3, 0.3]
+
+  bottle:
+    shape: circle
+    radius_m: 0.035
+    x: [-0.10, 0.10]
+    y: [-0.08, 0.20]
     yaw: [-0.3, 0.3]
 
   cup:
     shape: circle
     radius_m: 0.03
     x: [-0.410, 0.410]
-    y: [-0.270, -0.03]
-    yaw: [-0.3, 0.3]
-
-  bottle:
-    shape: circle
-    radius_m: 0.025
-    x: [-0.415, 0.415]
-    y: [-0.275, -0.03]
+    y: [-0.270, 0.270]
     yaw: [-0.3, 0.3]
 
   spoon_1:
@@ -90,7 +91,7 @@ objects:
     radius_m: 0.0108
     half_length_m: 0.0980
     x: [-0.331, 0.331]
-    y: [-0.191, -0.03]
+    y: [-0.191, 0.191]
     yaw: [-0.3, 0.3]
 
   spoon_2:
@@ -98,7 +99,7 @@ objects:
     radius_m: 0.0108
     half_length_m: 0.0980
     x: [-0.331, 0.331]
-    y: [-0.191, -0.03]
+    y: [-0.191, 0.191]
     yaw: [-0.3, 0.3]
 
   fork_1:
@@ -106,7 +107,7 @@ objects:
     radius_m: 0.0073
     half_length_m: 0.0994
     x: [-0.333, 0.333]
-    y: [-0.193, -0.03]
+    y: [-0.193, 0.193]
     yaw: [-0.3, 0.3]
 
   fork_2:
@@ -114,7 +115,7 @@ objects:
     radius_m: 0.0073
     half_length_m: 0.0994
     x: [-0.333, 0.333]
-    y: [-0.193, -0.03]
+    y: [-0.193, 0.193]
     yaw: [-0.3, 0.3]
 
 ranges:

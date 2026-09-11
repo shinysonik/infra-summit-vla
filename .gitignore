@@ -44,6 +44,7 @@ mjkey.txt
 # Compiled/derived scene artifacts -- the authored MJCF under sim/assets is
 # tracked, generated ones are not.
 sim/assets/**/*_generated.xml
+lerobot-kinematics/
 
 # ---------------------------------------------------------------------------
 # Model checkpoints, exports, OpenVINO IR

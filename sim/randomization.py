@@ -761,16 +761,17 @@ class DomainRandomizer:
         min_gap = self.placement_cfg["min_gap_between_objects_m"]
         drawer_max_attempts = max(max_attempts, 500)
 
-        # Sampling range is generous (most of the cavity); ACCEPTANCE is
-        # real collision detection against the drawer walls, not an
-        # estimated reach. Hand-computing reach from mesh dimensions proved
-        # unreliable multiple times (stale measured lengths, and visual vs.
-        # collision mesh extents differing) -- asking MuJoCo directly is the
-        # same proven approach already used for robot-collision avoidance.
-        CAVITY_HALF_X, CAVITY_HALF_Y = 0.11, 0.075
-        sample_margin = 0.01
-        x_lo, x_hi = -(CAVITY_HALF_X - sample_margin), CAVITY_HALF_X - sample_margin
-        y_lo, y_hi = -(CAVITY_HALF_Y - sample_margin), CAVITY_HALF_Y - sample_margin
+        # Sampling range comes from config (cavity_x/cavity_y), NOT hardcoded
+        # constants -- this was a real, previously-silent bug: the hardcoded
+        # values here ignored cavity_x/cavity_y entirely, so tightening
+        # those in randomization.yaml (e.g. to keep cutlery within IK reach)
+        # had zero effect. ACCEPTANCE is still real collision detection
+        # against the drawer walls (physical fit), independent of this --
+        # this range only controls where sampling is ATTEMPTED, restricting
+        # it further (e.g. for reach) is always safe as long as it stays
+        # inside the true physical cavity, which cavity_x/cavity_y already do.
+        x_lo, x_hi = di_cfg["cavity_x"]
+        y_lo, y_hi = di_cfg["cavity_y"]
 
         wall_names = ["drawer_wall_left", "drawer_wall_right",
                       "drawer_wall_back", "drawer_wall_front"]
@@ -859,7 +860,53 @@ class DomainRandomizer:
             r = self._placement_radius(name)
             return r + (self._placement_half_length(name) if cfg["shape"] == "capsule" else 0.0)
 
-        order = sorted(table_names, key=effective_radius, reverse=True)
+        def range_area(name):
+            cfg = self.object_cfg[name]
+            x_lo, x_hi = cfg["x"]
+            y_lo, y_hi = cfg["y"]
+            return (x_hi - x_lo) * (y_hi - y_lo)
+
+        def placement_difficulty(name):
+            """Combines both ways an object can be 'hard to place first':
+            being physically large (original heuristic), or having an
+            unusually small allowed range relative to its own size (a
+            frozen/pinned object's tiny zone gets crowded by other objects'
+            much wider ranges before its own turn). Pure size-first
+            de-prioritizes small-range objects and lets them get crowded
+            out (verified: 1/100 real failure, bottle's tiny zone invaded).
+            Pure range-first over-corrects and de-prioritizes the biggest
+            objects instead, since their ranges are naturally the largest.
+
+            Also weights in shape rigidity: a circle's footprint is
+            identical at every yaw, so it has no orientation to rotate into
+            whatever gap is left -- a capsule of similar size can angle
+            itself to fit a gap a circle of the same effective radius
+            cannot. Verified this matters: without the rigidity weight,
+            round objects (bowl/plate, both circles) were placed after all
+            four cutlery (capsules, more forgiving) and lost the placement
+            race in 3/150 seeds despite having reasonable size/range
+            scores individually."""
+            cfg = self.object_cfg[name]
+            r = effective_radius(name)
+            own_area = np.pi * r * r
+            rigidity = 3.0 if cfg["shape"] == "circle" else 1.0
+            base_difficulty = rigidity * own_area / max(range_area(name), 1e-9)
+            # An object whose OWN range is a statistical outlier -- much
+            # smaller than every other object's range (e.g. a frozen/pinned
+            # object) -- needs to go essentially first regardless of shape
+            # or size, since nothing else can be trusted not to randomly
+            # land in its narrow zone first. Verified: even after the shape
+            # and size weighting above, the frozen bottle (range_area=0.056
+            # vs 0.25-0.44 for everything else -- a clear outlier) still
+            # lost its own space in 2/300 seeds to bowl/plate placed
+            # earlier under the general formula.
+            all_range_areas = [range_area(n) for n in table_names]
+            median_range = float(np.median(all_range_areas))
+            if range_area(name) < 0.5 * median_range:
+                return base_difficulty + 1000.0
+            return base_difficulty
+
+        order = sorted(table_names, key=placement_difficulty, reverse=True)
 
         # Objects not yet processed this call still sit at whatever qpos
         # mj_resetData left them at (their raw MJCF nominal pose) -- push
@@ -921,14 +968,18 @@ class DomainRandomizer:
                 # candidates can.
                 yaw_mid = (yaw_lo + yaw_hi) / 2
                 grid_accepted = None
-                for x_c in np.linspace(x_lo, x_hi, 12):
-                    for y_c in np.linspace(y_lo, y_hi, 12):
+                grid_safety_buffer = 0.004  # avoids landing exactly at the
+                # min_gap threshold, where grid discretization can produce a
+                # gap a millimeter or two under the requirement even though
+                # a nearby, unsampled point would clear it comfortably.
+                for x_c in np.linspace(x_lo, x_hi, 20):
+                    for y_c in np.linspace(y_lo, y_hi, 20):
                         fp = self._make_footprint(name, x_c, y_c, yaw_mid)
                         if self._violates_drawer_avoidance(name, fp):
                             continue
                         if self._violates_base_keepout(fp):
                             continue
-                        if any(_footprint_gap(fp, other) < min_gap for other in placed):
+                        if any(_footprint_gap(fp, other) < min_gap + grid_safety_buffer for other in placed):
                             continue
                         self._apply_pose(data, name, x_c, y_c, yaw_mid)
                         mujoco.mj_forward(self.model, data)

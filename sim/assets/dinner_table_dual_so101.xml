@@ -263,9 +263,13 @@
       <geom name="cup_collision_geom_3" type="mesh" group="3" mesh="cup_collision_mesh_3"/>
       <geom name="cup_collision_geom_4" type="mesh" group="3" mesh="cup_collision_mesh_4"/>
     </body>
-    <body name="bottle" pos="0.36 -0.12 0.86">
+    <body name="bottle" pos="0.36 -0.12 0.825">
       <joint class="manip_object"/>
-      <geom size="0.025 0.09" type="cylinder" material="mat_bottle"/>
+      <inertial pos="0 0 -0.02" mass="0.25" diaginertia="0.0003 0.0003 0.0001"/>
+      <geom name="bottle_body" type="cylinder" size="0.035 0.055" pos="0 0 0" material="mat_bottle"/>
+      <geom name="bottle_shoulder" type="cylinder" size="0.025 0.010" pos="0 0 0.065" material="mat_bottle"/>
+      <geom name="bottle_neck" type="cylinder" size="0.012 0.030" pos="0 0 0.105" material="mat_bottle"/>
+      <geom name="bottle_lip" type="cylinder" size="0.014 0.006" pos="0 0 0.141" material="mat_bottle"/>
     </body>
     <body name="spoon_1" pos="-0.3406 -0.24 0.7805">
       <joint class="manip_object"/>
@@ -295,7 +299,7 @@
       <geom name="fork_2_coll_0" type="mesh" group="3" density="700" mesh="fork_collision_mesh_0"/>
       <geom name="fork_2_coll_1" type="mesh" group="3" density="700" mesh="fork_collision_mesh_1"/>
     </body>
-    <body name="left_base" childclass="left_so101_new_calib" pos="-0.22 0.24 0.78" quat="0.70710678 0 0 -0.70710678">
+    <body name="left_base" childclass="left_so101_new_calib" pos="-0.22 0.20 0.78" quat="0.70710678 0 0 -0.70710678">
       <inertial pos="0.0137179 -5.19711e-05 0.0334843" quat="0.420519 0.558762 0.57198 0.428704" mass="0.147" diaginertia="0.000136127 0.000131807 0.000113233"/>
       <geom class="left_visual" pos="-0.00636471 -9.94414e-05 -0.0024" quat="0.5 0.5 0.5 0.5" material="left_base_motor_holder_so101_v1_material" mesh="left_base_motor_holder_so101_v1"/>
       <geom class="left_visual" pos="-0.00636471 -8.97657e-09 -0.0024" quat="0.5 0.5 0.5 0.5" material="left_base_so101_v2_material" mesh="left_base_so101_v2"/>
@@ -365,7 +369,7 @@
         </body>
       </body>
     </body>
-    <body name="right_base" childclass="right_so101_new_calib" pos="0.22 0.24 0.78" quat="0.70710678 0 0 -0.70710678">
+    <body name="right_base" childclass="right_so101_new_calib" pos=" 0.22 0.20 0.78" quat="0.70710678 0 0 -0.70710678">
       <inertial pos="0.0137179 -5.19711e-05 0.0334843" quat="0.420519 0.558762 0.57198 0.428704" mass="0.147" diaginertia="0.000136127 0.000131807 0.000113233"/>
       <geom class="right_visual" pos="-0.00636471 -9.94414e-05 -0.0024" quat="0.5 0.5 0.5 0.5" material="right_base_motor_holder_so101_v1_material" mesh="right_base_motor_holder_so101_v1"/>
       <geom class="right_visual" pos="-0.00636471 -8.97657e-09 -0.0024" quat="0.5 0.5 0.5 0.5" material="right_base_so101_v2_material" mesh="right_base_so101_v2"/>
