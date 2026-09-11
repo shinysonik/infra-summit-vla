@@ -84,7 +84,7 @@
     <texture type="2d" colorspace="auto" name="tex_table" builtin="checker" rgb1="0.55 0.35 0.2" rgb2="0.5 0.3 0.18" width="300" height="300"/>
     <texture type="skybox" colorspace="auto" name="tex_sky" builtin="gradient" rgb1="0.65 0.75 0.9" rgb2="0.15 0.2 0.3" width="256" height="1536"/>
     <texture type="2d" colorspace="auto" name="tex_floor" builtin="checker" rgb1="0.82 0.82 0.84" rgb2="0.62 0.62 0.66" width="300" height="300"/>
-    <texture type="2d" colorspace="linear" name="bowl_texture" file="bowl/texture_map.png"/>
+   
     <texture type="2d" colorspace="linear" name="plate_texture" file="plate/texture_map.png"/>
     <texture type="2d" colorspace="linear" name="cup_texture" file="g_cups/texture_map.png"/>
     <texture type="2d" colorspace="linear" name="spoon_texture" file="spoon/texture_map.png"/>
@@ -95,7 +95,7 @@
     <material name="mat_metal" rgba="0.75 0.75 0.78 1"/>
     <material name="mat_floor" texture="tex_floor" texrepeat="12 12" reflectance="0.1"/>
     <material name="mat_wall" rgba="0.93 0.91 0.86 1"/>
-    <material name="bowl_material" texture="bowl_texture"/>
+    
     <material name="plate_material" texture="plate_texture"/>
     <material name="cup_material" texture="cup_texture"/>
     <material name="spoon_material" texture="spoon_texture"/>
@@ -130,12 +130,7 @@
     <material name="right_moving_jaw_so101_v1_material" rgba="1 0.82 0.12 1"/>
     <material name="right_wrist_camera_mount_so101_v1_material" rgba="1 0.82 0.12 1"/>
     <material name="right_wrist_camera_so101_v1_material" rgba="0.1 0.1 0.1 1"/>
-    <mesh name="bowl_visual_mesh" file="bowl/textured.obj"/>
-    <mesh name="bowl_collision_mesh_0" file="bowl/textured_coacd_0.stl"/>
-    <mesh name="bowl_collision_mesh_1" file="bowl/textured_coacd_1.stl"/>
-    <mesh name="bowl_collision_mesh_2" file="bowl/textured_coacd_2.stl"/>
-    <mesh name="bowl_collision_mesh_3" file="bowl/textured_coacd_3.stl"/>
-    <mesh name="bowl_collision_mesh_4" file="bowl/textured_coacd_4.stl"/>
+    
     <mesh name="plate_visual_mesh" file="plate/textured.obj" scale="0.68 0.68 0.68"/>
     <mesh name="plate_collision_mesh_0" file="plate/textured_coacd_0.stl" scale="0.68 0.68 0.68"/>
     <mesh name="plate_collision_mesh_1" file="plate/textured_coacd_1.stl" scale="0.68 0.68 0.68"/>
@@ -233,16 +228,7 @@
   <!-- VERTICAL RED HANDLE, longer, sticking up through and above the lid -->
       <geom name="drawer_handle" type="cylinder" size="0.008 0.06" pos="0 -0.090 0.10" rgba="0.9 0.1 0.1 1" friction="2.5 0.05 0.001"/>
     </body>
-    <body name="bowl" pos="-0.32 -0.06 0.801">
-      <inertial pos="0 0 0" mass="0.147" diaginertia="0.000527 0.000527 0.000977"/>
-      <joint class="manip_object"/>
-      <geom name="bowl_visual_geom" type="mesh" contype="0" conaffinity="0" material="bowl_material" mesh="bowl_visual_mesh"/>
-      <geom name="bowl_collision_geom_0" type="mesh" group="3" mesh="bowl_collision_mesh_0"/>
-      <geom name="bowl_collision_geom_1" type="mesh" group="3" mesh="bowl_collision_mesh_1"/>
-      <geom name="bowl_collision_geom_2" type="mesh" group="3" mesh="bowl_collision_mesh_2"/>
-      <geom name="bowl_collision_geom_3" type="mesh" group="3" mesh="bowl_collision_mesh_3"/>
-      <geom name="bowl_collision_geom_4" type="mesh" group="3" mesh="bowl_collision_mesh_4"/>
-    </body>
+  
     <body name="plate" pos="-0.06 -0.10 0.786">
       <inertial pos="0 0 0" mass="0.279" diaginertia="0.002279 0.002279 0.004528"/>
       <joint class="manip_object"/>

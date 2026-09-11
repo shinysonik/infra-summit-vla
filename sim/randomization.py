@@ -733,23 +733,51 @@ class DomainRandomizer:
 
     def _decide_drawer_interior(self, rng):
         """Per seed, decide which cutlery items start inside the closed
-        drawer instead of on the table. Returns a set of names. Drawn from
-        the SAME seeded rng as everything else -- consumes one rng.uniform
-        per cutlery piece (fixed draw count/order regardless of the cap
-        below, so adding/lowering max_items_in_drawer later doesn't change
-        which seeds pick which items, only how many of those picks get
-        used), deterministic and reproducible like every other
-        randomization axis here.
+        drawer instead of on the table. Returns a set of names.
 
-        Applies max_items_in_drawer as a hard cap -- see randomization.yaml
-        drawer_interior comment for why (real geometric packing limit, not
-        an arbitrary choice)."""
+        Draws exactly one rng.uniform per cutlery piece (fixed order), so
+        changing min_items_in_drawer later does NOT shift the rng stream
+        for other randomization axes (lighting, camera, background) on
+        already-used seeds -- only the drawer contents for that seed can
+        change, and only upward (never empties a previously non-empty draw).
+
+        After the random draw, enforces:
+          - min_items_in_drawer: if fewer than this many were picked by
+            chance, force-fill from the LOWEST uniform draws (they were
+            closest to being picked anyway, so it still reads as seeded).
+          - max_items_in_drawer: hard cap (real geometric packing limit).
+
+        Why min_items_in_drawer exists: with fraction_in_drawer=0.4 and 4
+        cutlery items, the probability all four land on the table is
+        0.6^4 = 13%. Those seeds are unusable for the retrieve task (the
+        drawer opens to an empty cavity, no retrieve waypoints exist, and
+        the whole bimanual phase is skipped). Seed 10001 was one of them.
+        Setting min_items_in_drawer=1 eliminates the dead-seed class
+        entirely, at the cost of biasing the distribution slightly toward
+        one-in-drawer -- which is fine, because the task is not "measure
+        the frequency of empty drawers", it is "always exercise retrieve".
+        """
         di_cfg = self.placement_cfg.get("drawer_interior")
         if not di_cfg or not di_cfg.get("enabled", False):
             return set()
+
         fraction = di_cfg["fraction_in_drawer"]
+        min_items = di_cfg.get("min_items_in_drawer", 0)
         cap = di_cfg.get("max_items_in_drawer", len(self._cutlery_names()))
-        selected = [name for name in self._cutlery_names() if rng.uniform() < fraction]
+
+        names = self._cutlery_names()
+        scores = [(name, rng.uniform()) for name in names]
+        selected = [name for name, u in scores if u < fraction]
+
+        # Force-fill if the random draw came up short.
+        if len(selected) < min_items and names:
+            remaining = sorted(
+                ((name, u) for name, u in scores if name not in selected),
+                key=lambda t: t[1],
+            )
+            for name, _ in remaining[: min_items - len(selected)]:
+                selected.append(name)
+
         return set(selected[:cap])
 
     def _place_in_drawer(self, data, rng, names, max_attempts):
@@ -882,7 +910,7 @@ class DomainRandomizer:
             whatever gap is left -- a capsule of similar size can angle
             itself to fit a gap a circle of the same effective radius
             cannot. Verified this matters: without the rigidity weight,
-            round objects (bowl/plate, both circles) were placed after all
+            round objects (plate, both circles) were placed after all
             four cutlery (capsules, more forgiving) and lost the placement
             race in 3/150 seeds despite having reasonable size/range
             scores individually."""
@@ -898,7 +926,7 @@ class DomainRandomizer:
             # land in its narrow zone first. Verified: even after the shape
             # and size weighting above, the frozen bottle (range_area=0.056
             # vs 0.25-0.44 for everything else -- a clear outlier) still
-            # lost its own space in 2/300 seeds to bowl/plate placed
+            # lost its own space in 2/300 seeds to plate placed
             # earlier under the general formula.
             all_range_areas = [range_area(n) for n in table_names]
             median_range = float(np.median(all_range_areas))
@@ -1071,7 +1099,7 @@ class DomainRandomizer:
 
     def _randomize_shape(self, rng):
         # KNOWN LIMITATION, verified empirically: writing geom_size on a
-        # MESH geom (bowl, plate, cup) has zero effect on its actual
+        # MESH geom ( plate, cup) has zero effect on its actual
         # collision geometry -- mesh collision comes from mesh_vert, not
         # geom_size (confirmed: a 5x geom_size write left geom_rbound
         # completely unchanged). This loop still runs for those objects

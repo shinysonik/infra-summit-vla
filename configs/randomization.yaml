@@ -8,13 +8,14 @@
 # ±0.55m layout, which was directly measured to be unable to reach the
 # table center or drawer at all (27-73cm error). Table half-extent
 # 0.34 x 0.20 (0.68 x 0.40m full size) was chosen to fit the real object
-# set (plate radius 0.10, bowl, cup, bottle, 2 spoons, 2 forks) with a
+# set (plate radius 0.10, cup, bottle, 2 spoons, 2 forks) with a
 # verified, non-overlapping layout -- checked with the actual capsule/
 # circle gap geometry, not eyeballed coordinates (an eyeballed layout
 # previously put a fork and the bottle 0.11m into real overlap and the
 # bottle got pushed off the table during settling).
 
 seeds: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+seeds_full_drawer: [10000, 10025, 10050, 10075, 10100]
 
 training:
   seed_range: [10000, 1000000]
@@ -49,7 +50,8 @@ placement:
   drawer_interior:
     enabled: true
     fraction_in_drawer: 0.4
-    max_items_in_drawer: 1
+    min_items_in_drawer: 1        # NEW: drawer must never be empty
+    max_items_in_drawer: 2
     world_y_center_closed_m: 0.24
     cavity_x: [-0.043, 0.043]
     cavity_y: [-0.054, -0.02]
@@ -58,12 +60,6 @@ placement:
 
 objects:
 
-  bowl:
-    shape: circle
-    radius_m: 0.085
-    x: [-0.355, 0.355]
-    y: [-0.10, 0.215]
-    yaw: [-0.3, 0.3]
 
   plate:
     shape: circle
