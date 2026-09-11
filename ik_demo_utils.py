@@ -66,8 +66,69 @@ def get_avoidance_limits(model, exclude_body=None):
             collision_detection_distance=0.06,
         )
         limits.append(cross_limit)
+        limits.append(mink.ConfigurationLimit(model))
 
     return limits
+
+
+def joint_space_lerp(configuration, model, joint_names, target_values, steps=30):
+    """Linearly interpolate specific joints from their CURRENT configuration
+    values to target_values, holding every other DOF fixed. Bypasses mink's
+    Cartesian IK (and its nullspace ambiguity) entirely for this segment --
+    use it to route through a manually-verified, known-collision-free
+    configuration instead of letting the solver pick an arbitrary elbow/wrist
+    branch on its own.
+
+    NOTE: this does not run CollisionAvoidanceLimit -- it trusts that the
+    straight joint-space line from the current (already-safe) pose to the
+    target (manually verified) pose stays safe. Verify with a contact check
+    on your real meshes before trusting it in production.
+    """
+    q_start = configuration.q.copy()
+    adrs = [model.jnt_qposadr[model.joint(jn).id] for jn in joint_names]
+    start_vals = [q_start[adr] for adr in adrs]
+
+    qpos_trace = []
+    for i in range(steps):
+        s = (i + 1) / steps
+        q = q_start.copy() if i == 0 else qpos_trace[-1].copy()
+        for adr, sv, tv in zip(adrs, start_vals, target_values):
+            q[adr] = (1.0 - s) * sv + s * tv
+        qpos_trace.append(q)
+
+    configuration.update(qpos_trace[-1])
+    return qpos_trace
+
+
+def activate_grasp_connect(model, data, eq_name, body1_name, body2_name, world_anchor_pt):
+    """Activate a `connect` equality constraint, anchored at the CURRENT physical
+    grasp point. Must be called AFTER the gripper has physically closed (contact
+    settled) and BEFORE any pulling motion. Call deactivate_grasp_connect to release.
+
+    This does not require correct mesh collision geometry -- it directly enforces
+    "these two bodies stay joined at this point," which is what a closed gripper
+    with sufficient friction is physically doing anyway. It replaces reliance on
+    the moving jaw's convex-hull mesh contact for load-bearing grip.
+    """
+    eq_id = model.equality(eq_name).id
+    b1 = model.body(body1_name).id
+    b2 = model.body(body2_name).id
+
+    def world_to_local(bid, world_pt):
+        p = data.xpos[bid]
+        R = data.xmat[bid].reshape(3, 3)
+        return R.T @ (world_pt - p)
+
+    model.eq_data[eq_id, 0:3] = world_to_local(b1, world_anchor_pt)
+    model.eq_data[eq_id, 3:6] = world_to_local(b2, world_anchor_pt)
+    data.eq_active[eq_id] = 1
+    model.eq_active0[eq_id] = 1
+
+
+def deactivate_grasp_connect(model, data, eq_name):
+    eq_id = model.equality(eq_name).id
+    data.eq_active[eq_id] = 0
+    model.eq_active0[eq_id] = 0
 
 
 def solve_ik_step(configuration, model, frame_name, target_xyz, target_quat=None,
