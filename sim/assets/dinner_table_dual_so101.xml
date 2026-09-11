@@ -66,7 +66,7 @@
           <geom type="mesh" contype="0" conaffinity="0" group="2"/>
         </default>
         <default class="right_collision">
-          <geom group="3"/>
+          <geom group="3"  friction="2.5 0.05 0.001"/>
         </default>
       </default>
       <default class="right_sts3215">
@@ -214,10 +214,10 @@
      and open bottom. Visual-only (contype=0) so it never collides with the
      drawer sliding inside it. -->
     <body name="drawer_housing" pos="0 0.24 0.81">
-      <geom name="housing_back"  type="box" size="0.122 0.005 0.045" pos="0 0.078 0.045" rgba="0.40 0.28 0.18 1" contype="0" conaffinity="0"/>
-      <geom name="housing_left"  type="box" size="0.005 0.083 0.045" pos="-0.117 0 0.045" rgba="0.40 0.28 0.18 1" contype="0" conaffinity="0"/>
-      <geom name="housing_right" type="box" size="0.005 0.083 0.045" pos="0.117 0 0.045"  rgba="0.40 0.28 0.18 1" contype="0" conaffinity="0"/>
-      <geom name="housing_lid"   type="box" size="0.122 0.083 0.005" pos="0 0 0.095"     rgba="0.40 0.28 0.18 1" contype="0" conaffinity="0"/>
+      <geom name="housing_back"  type="box" size="0.122 0.005 0.045" pos="0 0.082 0.045" rgba="0.40 0.28 0.18 1" contype="1" conaffinity="1" />
+      <geom name="housing_left"  type="box" size="0.005 0.083 0.045" pos="-0.123 0 0.045" rgba="0.40 0.28 0.18 1" contype="1" conaffinity="1" />
+      <geom name="housing_right" type="box" size="0.005 0.083 0.045" pos="0.123 0 0.045"  rgba="0.40 0.28 0.18 1" contype="1" conaffinity="1" />
+      <geom name="housing_lid"   type="box" size="0.122 0.083 0.005" pos="0 0 0.095"     rgba="0.40 0.28 0.18 1" contype="1" conaffinity="1"/>
     </body>
 
     <!-- Drawer: sliding body inside the housing -->
@@ -231,7 +231,7 @@
   <!-- front wall of drawer (visible face), now on -Y side -->
       <geom name="drawer_wall_front" type="box" size="0.11 0.003 0.05"  pos="0 -0.075 0.013" material="mat_drawer"/>
   <!-- VERTICAL RED HANDLE, longer, sticking up through and above the lid -->
-      <geom name="drawer_handle"     type="cylinder" size="0.008 0.06" pos="0 -0.090 0.10" rgba="0.9 0.1 0.1 1"/>
+      <geom name="drawer_handle" type="cylinder" size="0.008 0.06" pos="0 -0.090 0.10" rgba="0.9 0.1 0.1 1" friction="2.5 0.05 0.001"/>
     </body>
     <body name="bowl" pos="-0.32 -0.06 0.801">
       <inertial pos="0 0 0" mass="0.147" diaginertia="0.000527 0.000527 0.000977"/>
@@ -453,6 +453,6 @@
     <general name="right_elbow_flex" class="right_sts3215" joint="right_elbow_flex" ctrlrange="-1.69 1.69" forcerange="-3.35 3.35"/>
     <general name="right_wrist_flex" class="right_sts3215" joint="right_wrist_flex" ctrlrange="-1.65806 1.65806" forcerange="-3.35 3.35"/>
     <general name="right_wrist_roll" class="right_sts3215" joint="right_wrist_roll" ctrlrange="-2.74385 2.84121" forcerange="-3.35 3.35"/>
-    <general name="right_gripper" class="right_sts3215" joint="right_gripper" ctrlrange="-0.17453 1.74533" forcerange="-3.35 3.35"/>
+    <general name="right_gripper" class="right_sts3215" joint="right_gripper" ctrlrange="-0.17453 1.74533" forcerange="-8.0 8.0"/>
   </actuator>
 </mujoco>

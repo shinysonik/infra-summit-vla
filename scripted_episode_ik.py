@@ -1,83 +1,138 @@
 """
-Replaces the sine-sweep placeholder in collect_demonstrations.py with real
-IK-generated trajectories, automatically built from wherever DomainRandomizer
-actually placed objects/drawer THIS seed -- no manual per-seed tuning.
-
-Encodes the behavior discussed: close the drawer after every retrieval,
-never place/move dishes while the drawer is still open.
+Builds an IK trajectory for one episode: open drawer, retrieve cutlery,
+close drawer, then move a plate. Arms are hardcoded per grasp.
 """
 import numpy as np
 import mink
 import mujoco
 from ik_demo_utils import waypoint_sequence
 
-APPROACH_Z_OFFSET = 0.08   # hover height above a grasp target before descending
-GRASP_OPEN = 1.2           # gripper joint value: open
-GRASP_CLOSED = 0.0         # gripper joint value: closed
+APPROACH_Z_OFFSET = 0.08
+GRASP_OPEN = 1.2
+# Gripper hinge range is [-0.174533, 1.74533]. 0.0 is mid-range -- fingers
+# barely touch. -0.15 is near-closed and actually squeezes the handle.
+GRASP_CLOSED = -0.15
+
+# Must match control_decimation used by the caller when replaying the trace.
+CONTROL_DECIMATION = 10
+
+
+def _replay_phase_on_scratch(model, initial_qpos, qpos_phase, grip_phase):
+    """Replay a joint-space trajectory on a scratch MjData and return it.
+
+    Used to find out where free-joint objects ACTUALLY end up after a phase,
+    rather than predicting it analytically. Cutlery inside the drawer rides
+    with the drawer's back wall when it opens -- displacement depends on
+    friction, yaw, and mass, so it is not equal to slide_range in general
+    (measured: 14.5cm on fork_1 for a 16cm slide, plus ~1.5cm lateral drift).
+    Simulation is the only correct source of truth here.
+    """
+    scratch = mujoco.MjData(model)
+    scratch.qpos[:] = initial_qpos
+    scratch.qvel[:] = 0.0
+    mujoco.mj_forward(model, scratch)
+
+    for step in range(len(qpos_phase)):
+        for act_id in range(model.nu):
+            jid = model.actuator_trnid[act_id, 0]
+            adr = model.jnt_qposadr[jid]
+            scratch.ctrl[act_id] = qpos_phase[step][adr]
+        if grip_phase[step] is not None:
+            scratch.ctrl[model.actuator("right_gripper").id] = grip_phase[step]
+        for _ in range(CONTROL_DECIMATION):
+            mujoco.mj_step(model, scratch)
+
+    return scratch
 
 
 def build_drawer_and_cutlery_episode(model, data, randomizer):
-    """Phase order enforces your stated policy directly: open -> retrieve ->
-    CLOSE -> only then touch any dish. The drawer is never left open while
-    a dish waypoint runs."""
     configuration = mink.Configuration(model)
     configuration.update(data.qpos.copy())
 
-    handle_pos = data.geom_xpos[model.geom("drawer_handle").id].copy()
-    handle_pos = handle_pos + np.array([0, -0.03, 0])
-    drawer_bid = model.body("drawer").id
-    # pick whichever gripper the reach map says is reliable for the handle
-    # (right, given the current between-arms layout at x=0) -- don't hardcode
-    # this if you later move the drawer; read it from your reach map instead.
-    handle_frame = "right_gripper"
+    # Calibrated handle grasp pose: site position and orientation measured
+    # from a manual grasp in the viewer where the fingers wrap the handle.
+    # The drawer/handle are NOT randomized (fixed at (0, 0.24, 0.81)), so
+    # this pose is valid for every seed. Recorded interactively -- this is
+    # not a theoretical quat, it is an actually-reachable SO-101 pose.
+    handle_pos = np.array([-0.01374231, 0.12252117, 0.91137901])
+    HANDLE_QUAT = np.array([0.04128911, -0.13647269, 0.68135373, 0.71793281])
+    handle_frame = "right_gripperframe"
 
-    waypoints = []
-    # 1. hover above handle
-    waypoints.append((handle_frame, handle_pos + [0, 0, APPROACH_Z_OFFSET], None, GRASP_OPEN))
-    # 2. descend to handle, gripper open
-    waypoints.append((handle_frame, handle_pos, None, GRASP_OPEN))
-    # 3. close gripper around handle
-    waypoints.append((handle_frame, handle_pos, None, GRASP_CLOSED))
-    # 4. pull open -- move gripper along the drawer's own slide axis by its
-    #    real travel range (read from the model, not hardcoded)
+    # Staging pose for the right arm before approaching the drawer.
+    right_home_stage = np.array([0.22, 0.00, 0.90])
+
     slide_axis = model.jnt_axis[model.joint("drawer_slide").id]
     slide_range = model.jnt_range[model.joint("drawer_slide").id][1]
     pull_target = handle_pos + slide_axis * slide_range
-    waypoints.append((handle_frame, pull_target, None, GRASP_CLOSED))
-    # 5. release handle
-    waypoints.append((handle_frame, pull_target, None, GRASP_OPEN))
 
-    # 6. retrieve cutlery THIS seed actually put in the drawer -- read real
-    #    positions from randomizer state, not assumed coordinates
-    for name in randomizer.last_in_drawer_items:
-        cutlery_pos = data.xpos[model.body(name).id].copy()
-        frame = handle_frame  # or pick nearer arm by x-distance if you want both arms working
-        waypoints.append((frame, cutlery_pos + [0, 0, APPROACH_Z_OFFSET], None, GRASP_OPEN))
-        waypoints.append((frame, cutlery_pos, None, GRASP_OPEN))
-        waypoints.append((frame, cutlery_pos, None, GRASP_CLOSED))
-        waypoints.append((frame, cutlery_pos + [0, 0, APPROACH_Z_OFFSET], None, GRASP_CLOSED))
-        # place it somewhere reachable on the table -- use your reach map's
-        # 🎯 zone, not an arbitrary point
-        place_pos = np.array([0.0, 0.10, cutlery_pos[2]])
-        waypoints.append((frame, place_pos + [0, 0, APPROACH_Z_OFFSET], None, GRASP_CLOSED))
-        waypoints.append((frame, place_pos, None, GRASP_CLOSED))
-        waypoints.append((frame, place_pos, None, GRASP_OPEN))
+    # -------- PHASE 1: open drawer --------
+    open_waypoints = [
+        (handle_frame, right_home_stage, None, GRASP_OPEN),
+        (handle_frame, handle_pos + [0, 0, APPROACH_Z_OFFSET], HANDLE_QUAT, GRASP_OPEN),
+        (handle_frame, handle_pos, HANDLE_QUAT, GRASP_OPEN),
+        (handle_frame, handle_pos, HANDLE_QUAT, GRASP_CLOSED),
+        (handle_frame, pull_target, HANDLE_QUAT, GRASP_CLOSED),
+        (handle_frame, pull_target, HANDLE_QUAT, GRASP_OPEN),
+    ]
+    qpos_open, grip_open = waypoint_sequence(
+        configuration, model, open_waypoints, steps_per_segment=20
+    )
 
-    # 7. CLOSE the drawer -- mandatory, every episode, before any dish moves
-    waypoints.append((handle_frame, pull_target, None, GRASP_OPEN))
-    waypoints.append((handle_frame, pull_target, None, GRASP_CLOSED))
-    close_target = handle_pos
-    waypoints.append((handle_frame, close_target, None, GRASP_CLOSED))
-    waypoints.append((handle_frame, close_target, None, GRASP_OPEN))
+    # Replay open phase on a scratch sim to learn the real cutlery poses.
+    # Without this, retrieve planning targets the reset pose (drawer closed,
+    # cutlery 14-16cm behind where it actually is), IK cannot reach, and the
+    # arm just spins the wrist in place.
+    scratch = _replay_phase_on_scratch(model, data.qpos.copy(), qpos_open, grip_open)
 
-    # 8. only now touch dishes -- pick arm by which SIDE the object is on,
-    #    matching your reach map (left covers negative x, right covers
-    #    positive x, near x=0 either works). Hardcoding one arm here was
-    #    the bug the waypoint_sequence warning just caught (81.54cm error).
+    # -------- PHASE 2: retrieve cutlery (from real post-open positions) --------
+    retrieve_waypoints = []
+    for name in sorted(randomizer.last_in_drawer_items):
+        cutlery_pos = scratch.xpos[model.body(name).id].copy()
+        frame = "right_gripperframe"
+
+        # exclude_body="drawer" lets the gripper dive inside the open drawer
+        # without IK's CollisionAvoidanceLimit pushing it out of the cavity.
+        retrieve_waypoints.append((frame, cutlery_pos + [0, 0, APPROACH_Z_OFFSET], None, GRASP_OPEN, "drawer"))
+        retrieve_waypoints.append((frame, cutlery_pos, None, GRASP_OPEN, "drawer"))
+        retrieve_waypoints.append((frame, cutlery_pos, None, GRASP_CLOSED, "drawer"))
+        retrieve_waypoints.append((frame, cutlery_pos + [0, 0, APPROACH_Z_OFFSET], None, GRASP_CLOSED, "drawer"))
+
+        z_height = float(cutlery_pos[2])
+        place_pos = np.array([0.0, 0.10, z_height])
+
+        retrieve_waypoints.append((frame, place_pos + [0, 0, APPROACH_Z_OFFSET], None, GRASP_CLOSED))
+        retrieve_waypoints.append((frame, place_pos, None, GRASP_CLOSED))
+        retrieve_waypoints.append((frame, place_pos, None, GRASP_OPEN))
+
+    qpos_retr, grip_retr = waypoint_sequence(
+        configuration, model, retrieve_waypoints, steps_per_segment=20
+    )
+
+    # -------- PHASE 3: close drawer + pick plate --------
+    # Same handle grasp pose for closing as for opening.
+    tail_waypoints = [
+        (handle_frame, pull_target, HANDLE_QUAT, GRASP_OPEN),
+        (handle_frame, pull_target, HANDLE_QUAT, GRASP_CLOSED),
+        (handle_frame, handle_pos, HANDLE_QUAT, GRASP_CLOSED),
+        (handle_frame, handle_pos, HANDLE_QUAT, GRASP_OPEN),
+        (handle_frame, right_home_stage, None, GRASP_OPEN),
+    ]
+
     plate_pos = data.xpos[model.body("plate").id].copy()
-    plate_arm = "left_gripper" if plate_pos[0] < 0 else "right_gripper"
-    waypoints.append((plate_arm, plate_pos + [0, 0, APPROACH_Z_OFFSET], None, GRASP_OPEN))
-    # ... continue the same pick/place pattern for bowl, cup, bottle
+    # Same site-vs-body issue on the left arm: use the fingertip site.
+    plate_arm = "left_gripperframe"
+    left_home_stage = np.array([-0.22, 0.00, 0.90])
 
-    qpos_trace, gripper_trace = waypoint_sequence(configuration, model, waypoints)
+    tail_waypoints.append((plate_arm, left_home_stage, None, GRASP_OPEN))
+    tail_waypoints.append((plate_arm, plate_pos + [0, 0, APPROACH_Z_OFFSET], None, GRASP_OPEN, "plate"))
+    tail_waypoints.append((plate_arm, plate_pos, None, GRASP_OPEN, "plate"))
+    tail_waypoints.append((plate_arm, plate_pos, None, GRASP_CLOSED, "plate"))
+    tail_waypoints.append((plate_arm, plate_pos + [0, 0, APPROACH_Z_OFFSET], None, GRASP_CLOSED, "plate"))
+
+    qpos_tail, grip_tail = waypoint_sequence(
+        configuration, model, tail_waypoints, steps_per_segment=20
+    )
+
+    qpos_trace = qpos_open + qpos_retr + qpos_tail
+    gripper_trace = grip_open + grip_retr + grip_tail
     return qpos_trace, gripper_trace
