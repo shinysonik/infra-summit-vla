@@ -100,6 +100,195 @@ def joint_space_lerp(configuration, model, joint_names, target_values, steps=30)
     return qpos_trace
 
 
+def compute_gripper_closing_axis_local(model, data, gripper_body, moving_jaw_body, gripper_joint,
+                                        reference_qpos_5, arm_joint_names, dtheta=0.02):
+    """Measure the gripper's closing-motion direction, expressed in the
+    gripper site's own local frame. This is a MECHANISM CONSTANT: it does
+    not depend on the arm's shoulder/elbow/wrist_roll configuration (verified
+    empirically -- recomputing it from two unrelated arm poses gives the same
+    vector to ~1e-14). Only recompute this if the gripper geometry itself
+    changes (different STL, different joint placement).
+
+    Returns the unit vector in the `<gripper_body>frame` site's local frame.
+    """
+    for jn, val in zip(arm_joint_names, reference_qpos_5):
+        data.qpos[model.jnt_qposadr[model.joint(jn).id]] = val
+    g_adr = model.jnt_qposadr[model.joint(gripper_joint).id]
+    data.qpos[g_adr] = 0.3
+    mujoco.mj_forward(model, data)
+
+    site_id = model.site(f"{gripper_body}frame").id
+    tcp_world = data.site_xpos[site_id].copy()
+    site_R = data.site_xmat[site_id].reshape(3, 3).copy()
+
+    jaw_bid = model.body(moving_jaw_body).id
+    p = data.xpos[jaw_bid]
+    R = data.xmat[jaw_bid].reshape(3, 3)
+    local_on_jaw = R.T @ (tcp_world - p)
+
+    def world_from_local(local_pt):
+        p = data.xpos[jaw_bid]
+        R = data.xmat[jaw_bid].reshape(3, 3)
+        return p + R @ local_pt
+
+    data.qpos[g_adr] = 0.3 + dtheta
+    mujoco.mj_forward(model, data)
+    p_plus = world_from_local(local_on_jaw)
+    data.qpos[g_adr] = 0.3 - dtheta
+    mujoco.mj_forward(model, data)
+    p_minus = world_from_local(local_on_jaw)
+
+    tangent_world = p_plus - p_minus
+    tangent_world /= np.linalg.norm(tangent_world)
+    return site_R.T @ tangent_world
+
+
+def _rotation_from_a_to_b(a, b):
+    a = a / np.linalg.norm(a)
+    b = b / np.linalg.norm(b)
+    v = np.cross(a, b)
+    c = np.dot(a, b)
+    s = np.linalg.norm(v)
+    if s < 1e-8:
+        return np.eye(3) if c > 0 else -np.eye(3) + 2 * np.outer(a, a)
+    vx = np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
+    return np.eye(3) + vx + vx @ vx * ((1 - c) / (s ** 2))
+
+
+def compute_plate_rim_grasp(model, data, configuration, plate_center_xy, left_base_xy,
+                             plate_radius, plate_z, closing_axis_local, arm_joint_names,
+                             gripper_frame_name, home_stage_xyz, rim_fraction=0.9,
+                             outside_margin=0.06, sweep_steps_per_segment=15, phi_step_deg=15,
+                             grasp_side="near", max_orientation_error_deg=25.0):
+    """Find the plate-rim grasp point + orientation for THIS episode's actual
+    plate position. Pinches the rim vertically (closing_axis_local -> world Z)
+    so the jaws squeeze the plate's top/bottom surface at the rim (thin, ~1.5cm,
+    well within the gripper's ~4cm mouth) instead of the flat center (which
+    slips under load).
+
+    IMPORTANT, learned the hard way on the real robot mesh: the left arm is
+    only 5-DOF (5 revolute joints + gripper). A fully-specified 6D target
+    (3 position + 3 orientation) generally has NO exact solution for a 5-DOF
+    chain. mink's FrameTask resolves this as a weighted least-squares
+    compromise, and which compromise it lands on is EXTREMELY sensitive to
+    step resolution -- a coarse check (sweep_steps_per_segment=6, an earlier
+    version of this function) can report a converged, well-margined solution
+    that a full-resolution replay (steps=15-30) reveals is actually a false
+    positive: same quat, position error balloons from ~1cm to ~9cm because
+    the coarse path skipped past the true (bad) equilibrium the fine path
+    correctly settles into. Verified directly on this rig: steps=4/6/8 gave
+    err < 5cm, steps=10 gave 8.6cm, steps>=15 all converged to the SAME
+    9.4cm error (a real, reproducible attractor, not noise or slow
+    convergence -- 50 steps gives an identical result to 15).
+
+    Consequently this function ranks candidates on BOTH the achieved
+    position error AND the achieved orientation error (angle between the
+    resulting closing axis and world vertical) -- NOT on joint-limit margin,
+    which does not correlate with whether the least-squares compromise is
+    any good. And it evaluates every candidate at close to full resolution
+    (sweep_steps_per_segment=15 default) because coarser checks are not a
+    reliable proxy for the fine-resolution outcome, as shown above -- this
+    makes the sweep slower (~30s for 48 candidates on the real meshes) but
+    the 6-step version's speed was not real, it was reporting wrong answers
+    fast.
+
+    max_orientation_error_deg: candidates whose achieved closing axis is
+    more than this many degrees from vertical are rejected even if their
+    position error is excellent -- a badly tilted closing axis will not
+    pinch the rim top/bottom the way this grasp is designed to. On the one
+    real seed tested so far the best achievable compromise was ~20 degrees
+    off vertical, not 0 -- this is a real, seed-dependent kinematic limit
+    of the 5-DOF arm, not a bug; if every candidate gets rejected, that
+    seed's plate position may need `grasp_side="far"` or a smaller
+    `rim_fraction` (closer to center, shorter reach) instead.
+    """
+    to_base = left_base_xy - plate_center_xy
+    to_base_dir = to_base / np.linalg.norm(to_base)
+    if grasp_side == "far":
+        to_base_dir = -to_base_dir
+    elif grasp_side != "near":
+        raise ValueError(f"grasp_side must be 'near' or 'far', got {grasp_side!r}")
+    rim_xy = plate_center_xy + rim_fraction * plate_radius * to_base_dir
+    rim_xyz = np.array([rim_xy[0], rim_xy[1], plate_z])
+    outside_xyz = rim_xyz + outside_margin * np.array([to_base_dir[0], to_base_dir[1], 0.0])
+
+    q0 = configuration.q.copy()
+    best = None
+    for e1_sign in (1.0, -1.0):
+        R0 = _rotation_from_a_to_b(closing_axis_local, np.array([0.0, 0.0, e1_sign]))
+        for phi_deg in range(0, 360, phi_step_deg):
+            phi = np.radians(phi_deg)
+            Rz = np.array([[np.cos(phi), -np.sin(phi), 0],
+                            [np.sin(phi), np.cos(phi), 0],
+                            [0, 0, 1]])
+            R = Rz @ R0
+            quat = np.zeros(4)
+            mujoco.mju_mat2Quat(quat, R.flatten())
+
+            cfg = mink.Configuration(model)
+            cfg.update(q0)
+            waypoints = [
+                (gripper_frame_name, home_stage_xyz, None, 1.2, None),
+                (gripper_frame_name, outside_xyz, quat, 1.2, "plate"),
+                (gripper_frame_name, rim_xyz, quat, 1.2, "plate"),
+            ]
+            try:
+                waypoint_sequence(cfg, model, waypoints, steps_per_segment=sweep_steps_per_segment)
+            except Exception:
+                continue
+            transform = cfg.get_transform_frame_to_world(gripper_frame_name, "site")
+            final_site = transform.translation()
+            final_R = transform.rotation().as_matrix()
+            pos_err_cm = np.linalg.norm(final_site - rim_xyz) * 100
+            closing_world = final_R @ closing_axis_local
+            angle_from_vertical_deg = np.degrees(np.arccos(np.clip(abs(closing_world[2]), 0, 1)))
+
+            if angle_from_vertical_deg > max_orientation_error_deg:
+                continue
+            score = pos_err_cm + 0.3 * angle_from_vertical_deg
+            if best is None or score < best[0]:
+                best = (score, pos_err_cm, angle_from_vertical_deg, quat.copy())
+
+    if best is None:
+        raise RuntimeError(
+            "compute_plate_rim_grasp: no candidate satisfied max_orientation_error_deg "
+            f"({max_orientation_error_deg}) for this plate position. Try grasp_side='far', "
+            "a smaller rim_fraction, or relax max_orientation_error_deg."
+        )
+    _, pos_err_cm, angle_from_vertical_deg, quat = best
+
+    # IMPORTANT: scripted_episode_ik.py's actual tail waypoints pass
+    # target_quat=None (not the quat returned here) -- an earlier attempt to
+    # use it directly made the 5-DOF arm sacrifice position for orientation
+    # in at least one case (~8cm miss). Because of that, the sweep above
+    # (which DOES use quat to pick a good orientation) does not necessarily
+    # predict what the real, orientation-free execution will achieve. Found
+    # directly on seed 10012 (plate at world x=+0.25, far from the left base
+    # at x=-0.22, likely at or past this arm's reach limit): the sweep
+    # reported 4.5cm error, but replaying the REAL waypoints (target_quat=
+    # None) gave 13.4cm -- the arm never actually touched the plate, the
+    # weld never activated, and the "episode" silently did nothing.
+    #
+    # So: re-verify with the SAME target_quat=None path scripted_episode_ik.py
+    # actually uses, and return THAT number. This is the trustworthy signal
+    # for whether this specific (randomized) plate position is reachable at
+    # all -- use it to skip/flag episodes the same way SKIP_RETRIEVE already
+    # does for cutlery, rather than silently shipping a "successful-looking"
+    # trajectory where the gripper never touched anything.
+    verify_cfg = mink.Configuration(model)
+    verify_cfg.update(q0)
+    verify_waypoints = [
+        (gripper_frame_name, home_stage_xyz, None, 1.2, None),
+        (gripper_frame_name, outside_xyz, None, 1.2, "plate"),
+        (gripper_frame_name, rim_xyz, None, 1.2, "plate"),
+    ]
+    waypoint_sequence(verify_cfg, model, verify_waypoints, steps_per_segment=20)
+    verify_final = verify_cfg.get_transform_frame_to_world(gripper_frame_name, "site").translation()
+    true_pos_err_cm = float(np.linalg.norm(verify_final - rim_xyz) * 100)
+
+    return rim_xyz, outside_xyz, quat, true_pos_err_cm, angle_from_vertical_deg
+
+
 def activate_grasp_connect(model, data, eq_name, body1_name, body2_name, world_anchor_pt):
     """Activate a `connect` equality constraint, anchored at the CURRENT physical
     grasp point. Must be called AFTER the gripper has physically closed (contact
@@ -126,6 +315,57 @@ def activate_grasp_connect(model, data, eq_name, body1_name, body2_name, world_a
 
 
 def deactivate_grasp_connect(model, data, eq_name):
+    eq_id = model.equality(eq_name).id
+    data.eq_active[eq_id] = 0
+    model.eq_active0[eq_id] = 0
+
+
+def activate_grasp_weld(model, data, eq_name, body1_name, body2_name):
+    """Weld body2 rigidly to body1 at their CURRENT relative pose (6-DOF lock
+    -- translation + orientation). Use for objects that must not rotate
+    relative to the grasping hand once gripped (a free-floating plate on a
+    connect/3-DOF-point constraint will swing like a pendulum around the
+    anchor as the arm moves -- verified, ~7cm lateral drift over an 8cm lift).
+
+    body1_name MUST be a body that does NOT itself rotate as the gripper
+    hinge closes -- i.e. the FIXED wrist structure (e.g. "left_gripper"),
+    NOT the moving jaw (e.g. "left_moving_jaw_so101_v1"). If you weld to the
+    moving jaw and activate before the gripper has finished closing, the
+    welded object is rigidly attached to a frame that keeps rotating for
+    the remainder of the close motion, and gets flung with it. Verified
+    directly: welding to the moving jaw mid-close gives ~21 degrees of
+    rotation drift and ~3.4cm position drift by the time the gripper
+    finishes closing; welding to the fixed wrist body under the exact same
+    conditions gives ~1cm / ~0.5 degrees once settled -- delaying activation
+    until the gripper is fully closed does NOT fix this on its own (tested:
+    0.2 degree difference, i.e. no meaningful effect) if you're still
+    welding to the moving jaw. The body choice is what matters, not timing.
+
+    eq_data layout for MuJoCo's <weld>, confirmed empirically on this
+    MuJoCo version (not assumed): eq_data[0:3] = anchor (body1 frame),
+    eq_data[3:6] = relpose position (body1 frame), eq_data[6:10] = relpose
+    quaternion wxyz, eq_data[10] = torquescale (default 1.0, left
+    unmodified here).
+    """
+    eq_id = model.equality(eq_name).id
+    b1 = model.body(body1_name).id
+    b2 = model.body(body2_name).id
+    p1 = data.xpos[b1].copy()
+    R1 = data.xmat[b1].reshape(3, 3)
+    p2 = data.xpos[b2].copy()
+    R2 = data.xmat[b2].reshape(3, 3)
+    rel_pos = R1.T @ (p2 - p1)
+    R_rel = R1.T @ R2
+    rel_quat = np.zeros(4)
+    mujoco.mju_mat2Quat(rel_quat, R_rel.flatten())
+    model.eq_data[eq_id, 0:3] = 0.0
+    model.eq_data[eq_id, 3:6] = rel_pos
+    model.eq_data[eq_id, 6:10] = rel_quat
+    data.eq_active[eq_id] = 1
+    model.eq_active0[eq_id] = 1
+
+
+def deactivate_grasp_weld(model, data, eq_name):
     eq_id = model.equality(eq_name).id
     data.eq_active[eq_id] = 0
     model.eq_active0[eq_id] = 0

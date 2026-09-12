@@ -428,17 +428,32 @@
   </worldbody>
 
   <actuator>
-    <general name="left_shoulder_pan" class="left_sts3215" joint="left_shoulder_pan" ctrlrange="-1.91986 1.91986" forcerange="-3.35 3.35"/>
-    <general name="left_shoulder_lift" class="left_sts3215" joint="left_shoulder_lift" ctrlrange="-1.74533 1.74533" forcerange="-3.35 3.35"/>
-    <general name="left_elbow_flex" class="left_sts3215" joint="left_elbow_flex" ctrlrange="-1.69 1.69" forcerange="-3.35 3.35"/>
-    <general name="left_wrist_flex" class="left_sts3215" joint="left_wrist_flex" ctrlrange="-1.65806 1.65806" forcerange="-3.35 3.35"/>
-    <general name="left_wrist_roll" class="left_sts3215" joint="left_wrist_roll" ctrlrange="-2.74385 2.84121" forcerange="-3.35 3.35"/>
-    <general name="left_gripper" class="left_sts3215" joint="left_gripper" ctrlrange="-0.17453 1.74533" forcerange="-3.35 3.35"/>
-    <general name="right_shoulder_pan" class="right_sts3215" joint="right_shoulder_pan" ctrlrange="-1.91986 1.91986" forcerange="-3.35 3.35"/>
-    <general name="right_shoulder_lift" class="right_sts3215" joint="right_shoulder_lift" ctrlrange="-1.74533 1.74533" forcerange="-3.35 3.35"/>
-    <general name="right_elbow_flex" class="right_sts3215" joint="right_elbow_flex" ctrlrange="-1.69 1.69" forcerange="-3.35 3.35"/>
-    <general name="right_wrist_flex" class="right_sts3215" joint="right_wrist_flex" ctrlrange="-1.65806 1.65806" forcerange="-3.35 3.35"/>
-    <general name="right_wrist_roll" class="right_sts3215" joint="right_wrist_roll" ctrlrange="-2.74385 2.84121" forcerange="-3.35 3.35"/>
+    <general name="left_shoulder_pan" class="left_sts3215" joint="left_shoulder_pan" ctrlrange="-1.91986 1.91986" forcerange="-7.35 7.35"/>
+    <general name="left_shoulder_lift" class="left_sts3215" joint="left_shoulder_lift" ctrlrange="-1.74533 1.74533" forcerange="-7.35 7.35"/>
+    <general name="left_elbow_flex" class="left_sts3215" joint="left_elbow_flex" ctrlrange="-1.69 1.69" forcerange="-7.35 7.35"/>
+    <general name="left_wrist_flex" class="left_sts3215" joint="left_wrist_flex" ctrlrange="-1.65806 1.65806" forcerange="-7.35 7.35"/>
+    <general name="left_wrist_roll" class="left_sts3215" joint="left_wrist_roll" ctrlrange="-2.74385 2.84121" forcerange="-7.35 7.35"/>
+    <general name="left_gripper" class="left_sts3215" joint="left_gripper" ctrlrange="-0.17453 1.74533" forcerange="-7.35 7.35"/>
+    <general name="right_shoulder_pan" class="right_sts3215" joint="right_shoulder_pan" ctrlrange="-1.91986 1.91986" forcerange="-7.35 7.35"/>
+    <general name="right_shoulder_lift" class="right_sts3215" joint="right_shoulder_lift" ctrlrange="-1.74533 1.74533" forcerange="-7.35 7.35"/>
+    <general name="right_elbow_flex" class="right_sts3215" joint="right_elbow_flex" ctrlrange="-1.69 1.69" forcerange="-7.35 7.35"/>
+    <general name="right_wrist_flex" class="right_sts3215" joint="right_wrist_flex" ctrlrange="-1.65806 1.65806" forcerange="-7.35 7.35"/>
+    <general name="right_wrist_roll" class="right_sts3215" joint="right_wrist_roll" ctrlrange="-2.74385 2.84121" forcerange="-7.35 7.35"/>
     <general name="right_gripper" class="right_sts3215" joint="right_gripper" ctrlrange="-0.17453 1.74533" forcerange="-8.0 8.0"/>
   </actuator>
+
+  <equality>
+    <!-- Inactive by default. Activated at runtime (ik_demo_utils.activate_grasp_connect)
+         right after the right gripper physically closes on the drawer handle, anchored
+         at the handle's actual world position at that moment. This is a real MuJoCo
+         equality constraint (same solver as every joint/contact), not a qpos override --
+         it exists because the moving jaw's mesh collision is a convex hull of a thin
+         curved part and does not reliably retain a thin cylindrical handle under load. -->
+    <connect name="right_grasp_connect" body1="right_moving_jaw_so101_v1" body2="drawer"
+             anchor="0 0 0" active="false" solref="0.005 1" solimp="0.9 0.95 0.001"/>
+  </equality>
+  <equality>
+    <weld name="left_grasp_weld" body1="left_gripper" body2="plate"
+          anchor="0 0 0" relpose="0 0 0 1 0 0 0" active="false" solref="0.002 1" solimp="0.9 0.95 0.001"/>
+  </equality>
 </mujoco>

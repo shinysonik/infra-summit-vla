@@ -19,17 +19,19 @@ from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
 
 sys.path.insert(0, "sim")
-sys.path.insert(0, ".")  # for scripted_episode_ik and ik_demo_utils
+sys.path.insert(0, ".")
 from randomization import DomainRandomizer  # noqa: E402
 from scripted_episode_ik import build_drawer_and_cutlery_episode  # noqa: E402
+from ik_demo_utils import activate_grasp_connect, deactivate_grasp_connect  # noqa: E402
 
 MODEL_PATH = "sim/assets/dinner_table_dual_so101.xml"
 RANDOMIZATION_CFG = "configs/randomization.yaml"
 FPS = 30
 
-# Every actuator, in a fixed order -- this fixed order IS the 12-dim
-# action/state vector layout every other component (policy, inference
-# runtime) must agree on.
+# Render every Nth simulation step. Halves recording time; SmolVLA downsamples
+# images anyway, so 15 fps output is fine for training.
+RENDER_EVERY_N_STEPS = 2
+
 ACTUATOR_NAMES = [
     "left_shoulder_pan",
     "left_shoulder_lift",
@@ -75,9 +77,6 @@ def build_features():
 
 
 def get_joint_state(model, data):
-    """Read back the 12 actuated joint positions, in ACTUATOR_NAMES order --
-    NOT the raw qpos array, since qpos includes free-joint object states too
-    and isn't in a stable, policy-relevant order."""
     state = np.zeros(len(ACTUATOR_NAMES), dtype=np.float32)
     for i, act_name in enumerate(ACTUATOR_NAMES):
         act_id = model.actuator(act_name).id
@@ -96,10 +95,16 @@ def render_all_cameras(renderers, data):
 
 
 def _apply_qpos_to_ctrl(model, data, qpos):
-    """Write a full qpos array into data.ctrl targets for the 12 actuators.
-    Position actuators (gainprm ~998) treat ctrl as a target joint angle,
-    so qpos[joint] -> ctrl[actuator] is a direct copy."""
+    """Write IK qpos to actuators, EXCEPT the grippers.
+
+    Gripper commands come exclusively from gripper_trace, which knows which
+    side (left/right) is active per step. Writing gripper ctrl from qpos
+    here would let stale IK-solved hinge values stomp on the real open/closed
+    command -- that is why both gripper names are skipped.
+    """
     for act_name in ACTUATOR_NAMES:
+        if act_name.endswith("_gripper"):
+            continue
         act_id = model.actuator(act_name).id
         joint_id = model.actuator_trnid[act_id, 0]
         qpos_adr = model.jnt_qposadr[joint_id]
@@ -129,36 +134,45 @@ def collect(n_episodes, repo_id, root, instruction, control_decimation=10, seed_
     for ep in range(n_episodes):
         seed = randomizer.sample_training_seed(seed_rng)
         assert not randomizer.is_eval_seed(seed), (
-            f"sampled seed {seed} collides with a reserved eval seed -- "
-            "this should be impossible given disjoint ranges; stop and check "
-            "configs/randomization.yaml training.seed_range"
+            f"sampled seed {seed} collides with a reserved eval seed"
         )
         used_seeds.append(seed)
 
-        # 1. Reset scene with this seed (places objects, sets drawer state)
         randomizer.reset(data, seed)
         mujoco.mj_forward(model, data)
 
-        # 2. Build IK-based trajectory from the ACTUAL scene state this seed
         print(f"[collect] building IK trajectory for seed={seed}...")
-        qpos_trace, gripper_trace = build_drawer_and_cutlery_episode(
+        qpos_trace, gripper_trace, grasp_events = build_drawer_and_cutlery_episode(
             model, data, randomizer
         )
         print(f"[collect] trajectory: {len(qpos_trace)} steps, "
               f"cutlery-in-drawer={sorted(randomizer.last_in_drawer_items)}")
 
-        # 3. Step through the trace, applying ctrl targets and recording
         for step_idx in range(len(qpos_trace)):
             _apply_qpos_to_ctrl(model, data, qpos_trace[step_idx])
 
-            # Override gripper joint target with the discrete open/close value
+            # Gripper commands carry an explicit side (left/right) now, since
+            # bimanual phases use one arm to hold the drawer while the other
+            # reaches -- a single hardcoded right_gripper write would leave
+            # the left gripper uncommanded during its own retrieve phase.
             gval = gripper_trace[step_idx]
             if gval is not None:
-                right_gripper_act_id = model.actuator("right_gripper").id
-                data.ctrl[right_gripper_act_id] = gval
+                side, val = gval
+                data.ctrl[model.actuator(f"{side}_gripper").id] = val
+
+            if step_idx == grasp_events["activate_step"]:
+                handle_world_now = data.geom_xpos[model.geom("drawer_handle").id].copy()
+                activate_grasp_connect(model, data, grasp_events["eq_name"],
+                                        grasp_events["body1"], grasp_events["body2"],
+                                        handle_world_now)
+            if step_idx == grasp_events["deactivate_step"]:
+                deactivate_grasp_connect(model, data, grasp_events["eq_name"])
 
             for _ in range(control_decimation):
                 mujoco.mj_step(model, data)
+
+            if step_idx % RENDER_EVERY_N_STEPS != 0:
+                continue
 
             state = get_joint_state(model, data)
             frames = render_all_cameras(renderers, data)
